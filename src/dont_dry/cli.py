@@ -88,8 +88,17 @@ def _notification(t: Translator, result: PrintResult, low: list[str]) -> tuple[s
     return title, "\n".join(lines)
 
 
+def _last_sent(last: dict) -> str | None:
+    """When a page last reached the printer, from last-run.json (0.1.0 kept only the last run)."""
+    if last.get("last_sent"):
+        return str(last["last_sent"])
+    return str(last["time"]) if last.get("time") and (last.get("sent") or last.get("success")) \
+        else None
+
+
 def _report(cfg: Config, result: PrintResult) -> None:
     now = datetime.now(cfg.timezone)
+    previous = state.read(cfg.state_dir, state.LAST_RUN) or {}
     low: list[str] = []
     if result.printer and result.printer.markers:
         low = _low_ink(result.printer, cfg.low_ink_threshold)
@@ -101,6 +110,7 @@ def _report(cfg: Config, result: PrintResult) -> None:
         "time": now.isoformat(),
         "success": result.success,
         "sent": result.reached_printer,
+        "last_sent": now.isoformat() if result.reached_printer else _last_sent(previous),
         "message": result.message,
         "job_id": result.job_id,
         "document_format": result.document_format,
@@ -189,6 +199,23 @@ class Scheduler:
         which is wrong in the hour that repeats when daylight saving time ends."""
         return when.timestamp() - time.time()
 
+    def missed_print(self) -> datetime | None:
+        """The last scheduled print, when no page reached the printer since (dont-dry was down).
+        None on the very first start: with no record, there is nothing to catch up on."""
+        last = state.read(self.cfg.state_dir, state.LAST_RUN)
+        if last is None:
+            return None
+        previous = self.cron.previous_at_or_before(datetime.now(self.cfg.timezone))
+        if previous is None:
+            return None
+        sent = _last_sent(last)
+        try:
+            if sent and datetime.fromisoformat(sent).timestamp() >= previous.timestamp():
+                return None
+        except ValueError:
+            pass  # unreadable: catching up once is safer than skipping a whole interval
+        return previous
+
     def run(self) -> int:
         cfg = self.cfg
         log.info("dont-dry %s: printer %s, schedule %r (%s)", __version__, cfg.printer_uri,
@@ -196,6 +223,9 @@ class Scheduler:
         self.heartbeat(force=True)
         if cfg.run_on_start:
             log.info("RUN_ON_START is set, printing now")
+            self.print_now()
+        elif cfg.catch_up and (missed := self.missed_print()) is not None:
+            log.info("catching up on the print missed at %s", _when(missed))
             self.print_now()
         while not self.stopping.is_set():
             self.next_run = self.cron.next_after(datetime.now(cfg.timezone))

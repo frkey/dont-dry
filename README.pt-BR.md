@@ -189,6 +189,7 @@ confere todas ao iniciar e para com uma mensagem clara se alguma estiver errada.
 | `SCHEDULE` | `0 9 * * 1,4` | Expressão cron: minuto hora dia-do-mês mês dia-da-semana. Nomes (`mon`, `jan`), intervalos, listas, passos e atalhos como `@weekly` funcionam. As impressões precisam ficar a pelo menos 3 horas uma da outra. |
 | `TZ` | `UTC` | Fuso horário do agendamento, ex.: `America/Sao_Paulo` |
 | `RUN_ON_START` | `false` | Imprime uma vez assim que o agendador inicia (não se uma página chegou à impressora na última hora) |
+| `CATCH_UP` | `true` | Se a última impressão agendada foi perdida (a máquina estava desligada), imprime uma vez ao iniciar |
 | `PAGE_SIZE` | `a4` | `a4` ou `letter` |
 | `LOCALE` | `en-US` | Idioma da página, das notificações e da saída dos comandos: `en-US` ou `pt-BR` |
 | `PAGE_TITLE` | `dont-dry maintenance page` | Título impresso na página (o padrão segue o `LOCALE`: `página de manutenção dont-dry` em pt-BR) |

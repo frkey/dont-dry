@@ -105,6 +105,7 @@ class Config:
     page_title: str
     custom_page: str
     run_on_start: bool
+    catch_up: bool
     retries: int
     retry_delay: int
     job_timeout: int
@@ -136,6 +137,7 @@ class Config:
             page_title=_str("PAGE_TITLE") or i18n.Translator(locale)("page.title"),
             custom_page=_str("CUSTOM_PAGE"),
             run_on_start=_bool("RUN_ON_START", False),
+            catch_up=_bool("CATCH_UP", True),
             retries=_int("RETRIES", 3, maximum=20),
             retry_delay=_int("RETRY_DELAY", 300),
             job_timeout=_int("JOB_TIMEOUT", 300, minimum=10),
