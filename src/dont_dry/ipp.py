@@ -109,6 +109,11 @@ class IPPAnswerLost(IPPError):
     (for Print-Job, the page may be printing)."""
 
 
+class IPPRefused(IPPError):
+    """The printer's web server refused the request (an HTTP 4xx such as 401 for a login):
+    nothing was done, and trying again would not help."""
+
+
 @dataclass(frozen=True)
 class Resolution:
     x: int
@@ -404,8 +409,9 @@ class IPPClient:
         finally:
             timer.cancel()
             conn.close()
-        if expired.is_set():
-            raise IPPAnswerLost(f"no complete answer within {self.deadline:g} s")
+        if 400 <= http_response.status < 500 and http_response.status != 408:
+            raise IPPRefused(f"printer answered HTTP {http_response.status} "
+                             f"{http_response.reason}")
         if http_response.status != 200:
             raise IPPAnswerLost(f"printer answered HTTP {http_response.status} "
                                 f"{http_response.reason}")
@@ -419,9 +425,10 @@ class IPPClient:
     @staticmethod
     def _expire(conn: http.client.HTTPConnection, expired: threading.Event) -> None:
         expired.set()
-        if conn.sock is not None:
+        sock = conn.sock  # once: the request may be closing it right now
+        if sock is not None:
             with contextlib.suppress(OSError):
-                conn.sock.shutdown(socket.SHUT_RDWR)
+                sock.shutdown(socket.SHUT_RDWR)
 
     # -- operations ---------------------------------------------------------
 

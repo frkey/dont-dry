@@ -15,7 +15,7 @@ from PIL import Image, ImageOps
 from . import page, pwg
 from .config import Config
 from .ipp import (JOB_STATES, PRINTER_STATES, TAG_KEYWORD, Attr, IPPAnswerLost, IPPClient,
-                  IPPError, Resolution)
+                  IPPError, IPPRefused, Resolution)
 
 log = logging.getLogger(__name__)
 
@@ -63,8 +63,9 @@ class Marker:
 
 def _text(value: Any) -> str:
     """Text from the printer without control characters (escape sequences, newlines), so it
-    can neither rewrite a terminal nor forge a log line."""
-    return "".join(ch for ch in str(value) if ch.isprintable())
+    can neither rewrite a terminal nor forge a log line. Any whitespace becomes a plain space."""
+    return "".join(ch if ch.isprintable() else " " if ch.isspace() else ""
+                   for ch in str(value))
 
 
 def _enum(value: Any) -> int | None:
@@ -282,7 +283,8 @@ def print_page(cfg: Config, *, wait: Wait = plain_wait) -> PrintResult:
     try:
         info = inspect(client)
     except IPPError as exc:
-        return PrintResult(False, str(exc), retryable=True, reason="unreachable")
+        return PrintResult(False, str(exc), retryable=not isinstance(exc, IPPRefused),
+                           reason="unreachable")
 
     log.info("printer: %s (%s), state %s%s", info.name or "?", info.model or "?", info.state,
              f" [{', '.join(info.problems)}]" if info.problems else "")
@@ -308,6 +310,9 @@ def print_page(cfg: Config, *, wait: Wait = plain_wait) -> PrintResult:
         # The whole page went out: the printer may be printing it, so it is never sent again
         return PrintResult(False, f"{exc}; the page may have printed, so it was not sent again",
                            document_format=fmt, printer=info, reason="answer_lost")
+    except IPPRefused as exc:
+        return PrintResult(False, f"printer refused the job: {exc}", document_format=fmt,
+                           printer=info, reason="rejected")
     except IPPError as exc:
         return PrintResult(False, str(exc), document_format=fmt, printer=info, retryable=True,
                            reason="unreachable")
