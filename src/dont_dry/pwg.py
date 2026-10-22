@@ -108,25 +108,30 @@ def _encode_line(row: bytes, bpp: int) -> bytes:
 
 def encode(image: Image.Image, *, dpi: int, doc_type: str = "srgb_8",
            page_size_name: str = PAGE_SIZE_NAMES["a4"]) -> bytes:
-    """Encode a single-page image as a PWG Raster document."""
+    """Encode a single-page image as a PWG Raster document.
+
+    Rows are read one at a time, so besides the image only the (compressed) output is held: a
+    full copy of the raster is about 100 MB for A4 at 600 dpi.
+    """
     mode, _, bpp = DOCUMENT_TYPES[doc_type]
-    image = image.convert(mode)
+    if image.mode != mode:
+        image = image.convert(mode)
     width, height = image.size
-    data = image.tobytes()
-    line_len = width * bpp
+
+    def row(y: int) -> bytes:
+        return image.crop((0, y, width, y + 1)).tobytes()
 
     out = bytearray(SYNC)
     out += build_header(width=width, height=height, dpi=dpi, doc_type=doc_type,
                         page_size_name=page_size_name)
     y = 0
     while y < height:
-        row = data[y * line_len : (y + 1) * line_len]
+        current = row(y)
         repeat = 1
-        while (y + repeat < height and repeat < 256
-               and data[(y + repeat) * line_len : (y + repeat + 1) * line_len] == row):
+        while y + repeat < height and repeat < 256 and row(y + repeat) == current:
             repeat += 1
         out.append(repeat - 1)
-        out += _encode_line(row, bpp)
+        out += _encode_line(current, bpp)
         y += repeat
     return bytes(out)
 
