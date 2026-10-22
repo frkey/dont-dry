@@ -1,6 +1,8 @@
 import time
+from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -260,3 +262,50 @@ def test_notification_without_a_reason_still_says_what_happened():
     title, body = cli._notification(t, PrintResult(True, "ok"), [])
     assert title == "dont-dry: página impressa"
     assert body == "A página foi impressa.\nDetalhes: ok"
+
+
+# -- never more pages than scheduled ---------------------------------------------
+
+
+def test_a_schedule_that_never_fires_prints_nothing_even_with_run_on_start(monkeypatch, cfg):
+    monkeypatch.setenv("SCHEDULE", "0 9 30 2 *")
+    monkeypatch.setenv("RUN_ON_START", "true")
+    calls = _fake_prints(monkeypatch, PrintResult(True, "ok"))
+    assert cli.main(["run"]) == 2
+    assert calls == []
+
+
+def test_a_schedule_that_prints_too_often_is_refused(monkeypatch, cfg, caplog):
+    monkeypatch.setenv("SCHEDULE", "* 9 * * 1")
+    # without the check the loop would wait for Monday: make any wait stop it instead
+    monkeypatch.setattr(cli.Scheduler, "wait", lambda self, seconds: self.stopping.set())
+    assert cli.main(["run"]) == 2
+    assert "less than 3 hours apart" in caplog.text
+
+
+def test_no_second_print_right_after_one_reached_the_printer(cfg, monkeypatch):
+    calls = _fake_prints(monkeypatch, PrintResult(True, "job 1 completed", job_id=1),
+                         PrintResult(True, "job 2 completed", job_id=2))
+    scheduler = cli.Scheduler(cfg)
+    scheduler.print_now()
+    scheduler.print_now()  # a restart loop or a clock step back: not again within the hour
+    assert len(calls) == 1
+    assert state.read(cfg.state_dir, state.LAST_RUN)["sent"] is True
+
+
+def test_a_print_long_ago_or_a_failure_does_not_block_the_next(cfg, monkeypatch):
+    state.write(cfg.state_dir, state.LAST_RUN, {"time": "2020-01-01T09:00:00+00:00",
+                                                "sent": True})
+    calls = _fake_prints(monkeypatch, PrintResult(False, "asleep", retryable=False),
+                         PrintResult(True, "job 1 completed", job_id=1))
+    scheduler = cli.Scheduler(cfg)
+    scheduler.print_now()  # last success was years ago: prints (and fails)
+    scheduler.print_now()  # a failure that never reached the printer does not block
+    assert len(calls) == 2
+
+
+def test_the_run_loop_waits_by_the_clock_not_the_wall(cfg, monkeypatch):
+    # next_run in the repeated DST hour must be compared as an instant
+    scheduler = cli.Scheduler(cfg)
+    past = datetime.fromtimestamp(time.time() - 60, ZoneInfo("Europe/Berlin"))
+    assert scheduler.seconds_until(past) < 0

@@ -13,6 +13,8 @@ EnvironmentFile=/etc/dont-dry.env
 ExecStart=/opt/dont-dry/venv/bin/dont-dry run
 Restart=on-failure
 RestartSec=30
+# Exit code 2 is a configuration error: starting again would not fix it
+RestartPreventExitStatus=2
 Environment=PYTHONUNBUFFERED=1
 Environment=STATE_DIR=/var/lib/dont-dry
 
@@ -20,6 +22,9 @@ Environment=STATE_DIR=/var/lib/dont-dry
 # implies ProtectSystem=strict, ProtectHome=read-only, PrivateTmp and NoNewPrivileges.
 # In a Proxmox LXC container this sandbox needs the "nesting" feature (on by default).
 DynamicUser=yes
+# Named, so the "dont-dry" command (installed by install.sh) runs as the same throwaway user and
+# can record its prints in the same state folder
+User=dont-dry
 StateDirectory=dont-dry
 UMask=0077
 CapabilityBoundingSet=

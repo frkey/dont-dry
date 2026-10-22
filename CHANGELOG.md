@@ -6,6 +6,20 @@ All notable changes to dont-dry are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A `SCHEDULE` that never fires (such as February 30) is refused before anything prints. Before,
+  `RUN_ON_START` printed a page, dont-dry stopped with an error, and the service restarted and
+  printed again about every 30 seconds. The systemd unit no longer restarts on a configuration
+  error.
+- When daylight saving time ends, a time in the repeated hour prints once, not twice.
+- A schedule with prints less than 3 hours apart (such as `* 9 * * 1`, sixty pages every Monday)
+  is refused at start-up.
+- dont-dry never prints again within an hour of a page that reached the printer, whatever asks
+  for it. Pages printed with the `dont-dry` command of the systemd install are recorded too, and
+  `docker-compose.yml` keeps the record in a volume (`STATE_DIR=/var/lib/dont-dry`), so it
+  survives restarts.
+
 ## [0.1.0] - 2026-10-22
 
 The first public release.

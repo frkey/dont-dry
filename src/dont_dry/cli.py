@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import __version__, notify, page, pwg, state
@@ -25,6 +25,9 @@ log = logging.getLogger("dont-dry")
 HEARTBEAT_EVERY = 30  # seconds
 # The healthcheck allows a few missed heartbeats: one IPP request can block for a minute or two
 HEARTBEAT_STALE = HEARTBEAT_EVERY * 6
+# No second page this soon after one reached the printer, whatever asks for it (a restart loop,
+# the clock stepping back). Shorter than schedule.MIN_GAP, so it never skips a scheduled print.
+RECENT_PRINT = timedelta(hours=1)
 RENDER_FORMATS = {".pdf": "pdf", ".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".pwg": "pwg"}
 
 
@@ -97,6 +100,7 @@ def _report(cfg: Config, result: PrintResult) -> None:
     state.write(cfg.state_dir, state.LAST_RUN, {
         "time": now.isoformat(),
         "success": result.success,
+        "sent": result.reached_printer,
         "message": result.message,
         "job_id": result.job_id,
         "document_format": result.document_format,
@@ -115,6 +119,19 @@ def _when(dt: datetime) -> str:
     return dt.strftime("%a %Y-%m-%d %H:%M %Z")
 
 
+def _sent_recently(cfg: Config) -> timedelta | None:
+    """How long ago the last page reached the printer, when that was less than RECENT_PRINT
+    ago. A time far in the future (a clock that was reset) does not count."""
+    last = state.read(cfg.state_dir, state.LAST_RUN) or {}
+    if not last.get("sent"):
+        return None
+    try:
+        age = datetime.now(cfg.timezone) - datetime.fromisoformat(str(last.get("time")))
+    except (TypeError, ValueError):
+        return None
+    return age if -RECENT_PRINT < age < RECENT_PRINT else None
+
+
 class Scheduler:
     """The `run` loop. Every wait (until the next print, between retries, for a job to finish)
     keeps the heartbeat fresh for the healthcheck and ends early on SIGTERM or SIGINT."""
@@ -122,6 +139,9 @@ class Scheduler:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.cron = Cron(cfg.schedule)
+        # before anything prints: a schedule that never fires, or fires minutes apart, is a
+        # configuration error (exit code 2, which the systemd unit does not restart)
+        self.cron.check(datetime.now(cfg.timezone))
         self.stopping = threading.Event()
         self.next_run: datetime | None = None
         self._last_beat: float | None = None
@@ -156,7 +176,18 @@ class Scheduler:
         return False
 
     def print_now(self) -> None:
+        age = _sent_recently(self.cfg)
+        if age is not None:
+            log.warning("a page reached the printer %d minutes ago; not printing again so soon",
+                        max(0, age.total_seconds() // 60))
+            return
         _report(self.cfg, _attempt(self.cfg, self.cfg.retries, self.wait))
+
+    @staticmethod
+    def seconds_until(when: datetime) -> float:
+        """Compared as instants: subtracting two datetimes of one zone compares wall clocks,
+        which is wrong in the hour that repeats when daylight saving time ends."""
+        return when.timestamp() - time.time()
 
     def run(self) -> int:
         cfg = self.cfg
@@ -173,7 +204,7 @@ class Scheduler:
             # Wake up at least every heartbeat and compare with the wall clock again, so a clock
             # change (NTP, a suspended VM) does not shift the print time
             while not self.stopping.is_set():
-                remaining = (self.next_run - datetime.now(cfg.timezone)).total_seconds()
+                remaining = self.seconds_until(self.next_run)
                 if remaining <= 0:
                     self.print_now()
                     break
@@ -250,6 +281,7 @@ def cmd_next(cfg: Config, args: argparse.Namespace) -> int:
     t = Translator(cfg.locale)
     cron = Cron(cfg.schedule)
     when = datetime.now(cfg.timezone)
+    cron.check(when)
     print(t("next.header", schedule=cfg.schedule, timezone=cfg.timezone.key))
     for _ in range(args.count):
         when = cron.next_after(when)
