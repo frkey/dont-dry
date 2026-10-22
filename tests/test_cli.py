@@ -309,3 +309,64 @@ def test_the_run_loop_waits_by_the_clock_not_the_wall(cfg, monkeypatch):
     scheduler = cli.Scheduler(cfg)
     past = datetime.fromtimestamp(time.time() - 60, ZoneInfo("Europe/Berlin"))
     assert scheduler.seconds_until(past) < 0
+
+
+# -- catching up on a missed print --------------------------------------------------
+
+
+def _run_once(cfg, monkeypatch):
+    """Runs the scheduler until its first wait; returns how many times it printed."""
+    scheduler = cli.Scheduler(cfg)
+    printed = []
+    monkeypatch.setattr(scheduler, "print_now", lambda: printed.append(1))
+    monkeypatch.setattr(scheduler, "wait", lambda seconds: scheduler.stopping.set())
+    scheduler.run()
+    return len(printed)
+
+
+def _last_run(cfg, **fields):
+    state.write(cfg.state_dir, state.LAST_RUN, {"time": "2026-10-01T09:00:00-03:00",
+                                                "sent": False, **fields})
+
+
+def test_catches_up_on_a_print_missed_while_down(cfg, monkeypatch):
+    _last_run(cfg, last_sent="2020-01-01T09:00:00+00:00")  # long before the last scheduled time
+    assert _run_once(cfg, monkeypatch) == 1
+
+
+def test_no_catch_up_when_the_last_scheduled_print_went_out(cfg, monkeypatch):
+    _last_run(cfg, last_sent=datetime.now(cfg.timezone).isoformat())
+    assert _run_once(cfg, monkeypatch) == 0
+
+
+def test_no_catch_up_on_the_very_first_start(cfg, monkeypatch):
+    assert _run_once(cfg, monkeypatch) == 0
+
+
+def test_catch_up_can_be_turned_off(monkeypatch, cfg):
+    monkeypatch.setenv("CATCH_UP", "false")
+    cfg = Config.from_env()
+    _last_run(cfg, last_sent="2020-01-01T09:00:00+00:00")
+    assert _run_once(cfg, monkeypatch) == 0
+
+
+def test_last_sent_survives_a_failed_attempt(cfg):
+    cli._report(cfg, PrintResult(True, "job 1 completed", job_id=1))
+    sent = state.read(cfg.state_dir, state.LAST_RUN)["last_sent"]
+    cli._report(cfg, PrintResult(False, "asleep"))
+    last = state.read(cfg.state_dir, state.LAST_RUN)
+    assert last["sent"] is False and last["last_sent"] == sent
+
+
+def test_a_print_cut_short_by_a_restart_is_not_caught_up(cfg, monkeypatch):
+    # the old process died after sending, before writing last-run.json
+    _last_run(cfg, last_sent="2020-01-01T09:00:00+00:00")
+    state.write(cfg.state_dir, state.SENDING, {"time": datetime.now(cfg.timezone).isoformat()})
+    assert _run_once(cfg, monkeypatch) == 0
+    assert cli._sent_recently(cfg) is not None  # and it counts as a page that may be out
+
+
+def test_the_sending_mark_is_cleared_after_the_report(cfg, monkeypatch):
+    _fake_prints(monkeypatch, PrintResult(False, "asleep"))
+    cli.Scheduler(cfg).print_now()
+    assert state.read(cfg.state_dir, state.SENDING) is None

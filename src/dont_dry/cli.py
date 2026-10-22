@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import signal
 import sys
@@ -88,8 +89,17 @@ def _notification(t: Translator, result: PrintResult, low: list[str]) -> tuple[s
     return title, "\n".join(lines)
 
 
+def _last_sent(last: dict) -> str | None:
+    """When a page last reached the printer, from last-run.json (0.1.0 kept only the last run)."""
+    if last.get("last_sent"):
+        return str(last["last_sent"])
+    return str(last["time"]) if last.get("time") and (last.get("sent") or last.get("success")) \
+        else None
+
+
 def _report(cfg: Config, result: PrintResult) -> None:
     now = datetime.now(cfg.timezone)
+    previous = state.read(cfg.state_dir, state.LAST_RUN) or {}
     low: list[str] = []
     if result.printer and result.printer.markers:
         low = _low_ink(result.printer, cfg.low_ink_threshold)
@@ -101,6 +111,7 @@ def _report(cfg: Config, result: PrintResult) -> None:
         "time": now.isoformat(),
         "success": result.success,
         "sent": result.reached_printer,
+        "last_sent": now.isoformat() if result.reached_printer else _last_sent(previous),
         "message": result.message,
         "job_id": result.job_id,
         "document_format": result.document_format,
@@ -119,16 +130,25 @@ def _when(dt: datetime) -> str:
     return dt.strftime("%a %Y-%m-%d %H:%M %Z")
 
 
-def _sent_recently(cfg: Config) -> timedelta | None:
-    """How long ago the last page reached the printer, when that was less than RECENT_PRINT
-    ago. A time far in the future (a clock that was reset) does not count."""
+def _may_have_printed_at(cfg: Config) -> datetime | None:
+    """When a page last may have come out: the last one that reached the printer, or a print
+    that was cut short (dont-dry stopped before reporting it)."""
+    times = []
     last = state.read(cfg.state_dir, state.LAST_RUN) or {}
-    if not last.get("sent"):
+    cut_short = state.read(cfg.state_dir, state.SENDING) or {}
+    for text in (_last_sent(last), cut_short.get("time")):
+        with contextlib.suppress(TypeError, ValueError):  # missing or unreadable
+            times.append(datetime.fromisoformat(str(text)))
+    return max(times, key=lambda t: t.timestamp()) if times else None
+
+
+def _sent_recently(cfg: Config) -> timedelta | None:
+    """How long ago a page may have come out, when that was less than RECENT_PRINT ago. A time
+    far in the future (a clock that was reset) does not count."""
+    when = _may_have_printed_at(cfg)
+    if when is None:
         return None
-    try:
-        age = datetime.now(cfg.timezone) - datetime.fromisoformat(str(last.get("time")))
-    except (TypeError, ValueError):
-        return None
+    age = datetime.now(cfg.timezone) - when
     return age if -RECENT_PRINT < age < RECENT_PRINT else None
 
 
@@ -181,13 +201,29 @@ class Scheduler:
             log.warning("a page reached the printer %d minutes ago; not printing again so soon",
                         max(0, age.total_seconds() // 60))
             return
+        state.write(self.cfg.state_dir, state.SENDING,
+                    {"time": datetime.now(self.cfg.timezone).isoformat()})
         _report(self.cfg, _attempt(self.cfg, self.cfg.retries, self.wait))
+        state.remove(self.cfg.state_dir, state.SENDING)
 
     @staticmethod
     def seconds_until(when: datetime) -> float:
         """Compared as instants: subtracting two datetimes of one zone compares wall clocks,
         which is wrong in the hour that repeats when daylight saving time ends."""
         return when.timestamp() - time.time()
+
+    def missed_print(self) -> datetime | None:
+        """The last scheduled print, when no page reached the printer since (dont-dry was down).
+        None on the very first start: with no record, there is nothing to catch up on."""
+        if state.read(self.cfg.state_dir, state.LAST_RUN) is None:
+            return None
+        previous = self.cron.previous_at_or_before(datetime.now(self.cfg.timezone))
+        if previous is None:
+            return None
+        printed = _may_have_printed_at(self.cfg)
+        if printed is not None and printed.timestamp() >= previous.timestamp():
+            return None
+        return previous
 
     def run(self) -> int:
         cfg = self.cfg
@@ -196,6 +232,9 @@ class Scheduler:
         self.heartbeat(force=True)
         if cfg.run_on_start:
             log.info("RUN_ON_START is set, printing now")
+            self.print_now()
+        elif cfg.catch_up and (missed := self.missed_print()) is not None:
+            log.info("catching up on the print missed at %s", _when(missed))
             self.print_now()
         while not self.stopping.is_set():
             self.next_run = self.cron.next_after(datetime.now(cfg.timezone))

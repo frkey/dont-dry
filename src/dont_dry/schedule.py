@@ -33,6 +33,8 @@ MACROS = {
 MIN_GAP = timedelta(hours=3)
 CHECK_PRINTS = 30            # how many upcoming prints check() looks at...
 CHECK_HORIZON = timedelta(days=4 * 366)  # ...within this long (a Feb 29 schedule fires rarely)
+# How far back previous_at_or_before() looks, widening only when it finds nothing
+PREVIOUS_LOOKBACK = (timedelta(days=8), timedelta(days=32), timedelta(days=367))
 
 
 class CronError(ValueError):
@@ -138,6 +140,20 @@ class Cron:
                     f"fields (\"0 9 * * 1\" is 09:00 on Mondays)")
             times.append(when)
         return times
+
+    def previous_at_or_before(self, now: datetime) -> datetime | None:
+        """The last print time at or before `now`, up to about a year back; None if none."""
+        for back in PREVIOUS_LOOKBACK:
+            found = None
+            when = now - back
+            try:
+                while (when := self.next_after(when)).timestamp() <= now.timestamp():
+                    found = when
+            except CronError:
+                return None
+            if found is not None:
+                return found
+        return None
 
     def _next_wall(self, after: datetime) -> datetime:
         """First matching wall-clock minute strictly after `after`, ignoring time zones."""

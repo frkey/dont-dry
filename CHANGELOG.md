@@ -6,6 +6,11 @@ All notable changes to dont-dry are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- When dont-dry starts after missing a scheduled print (the machine was off or dont-dry was
+  stopped), it prints once to catch up. `CATCH_UP=false` turns this off.
+
 ### Fixed
 
 - A `SCHEDULE` that never fires (such as February 30) is refused before anything prints. Before,

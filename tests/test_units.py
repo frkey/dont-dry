@@ -149,3 +149,21 @@ def test_check_measures_the_gap_on_the_wall_clock():
     # 02:00 does not exist on 2026-03-29 in Berlin (it prints at 03:00), yet the schedule is
     # three hours apart every day: it must not be refused depending on when dont-dry starts
     Cron("0 2,5 * * *").check(datetime(2026, 3, 20, 12, 0, tzinfo=BERLIN))
+
+
+# -- the previous print, for catching up --------------------------------------------
+
+
+@pytest.mark.parametrize("expr,now,expected", [
+    ("0 9 * * 1,4", (2026, 10, 21, 20, 0), (2026, 10, 19, 9, 0)),
+    ("0 9 * * 1,4", (2026, 10, 19, 9, 0), (2026, 10, 19, 9, 0)),   # "at or before"
+    ("0 12 1 * *", (2026, 10, 2, 0, 0), (2026, 10, 1, 12, 0)),
+    ("0 9 1 1 *", (2026, 10, 21, 0, 0), (2026, 1, 1, 9, 0)),        # needs the widest lookback
+])
+def test_cron_previous_print(expr, now, expected):
+    found = Cron(expr).previous_at_or_before(datetime(*now, tzinfo=SP))
+    assert found == datetime(*expected, tzinfo=SP)
+
+
+def test_cron_previous_print_is_none_when_too_far_back():
+    assert Cron("0 9 29 feb *").previous_at_or_before(datetime(2026, 10, 21, tzinfo=SP)) is None

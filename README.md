@@ -183,6 +183,7 @@ them all when it starts and stops with a clear message if one is wrong.
 | `SCHEDULE` | `0 9 * * 1,4` | Cron expression: minute hour day-of-month month day-of-week. Names (`mon`, `jan`), ranges, lists, steps and `@weekly`-style macros work. Prints must be at least 3 hours apart. |
 | `TZ` | `UTC` | Time zone for the schedule, e.g. `America/Sao_Paulo` |
 | `RUN_ON_START` | `false` | Print once when the scheduler starts (not if a page reached the printer in the last hour) |
+| `CATCH_UP` | `true` | When the last scheduled print never reached the printer (the machine or the printer was off), print once at start-up |
 | `PAGE_SIZE` | `a4` | `a4` or `letter` |
 | `LOCALE` | `en-US` | Language of the page, notifications and command output: `en-US` or `pt-BR` |
 | `PAGE_TITLE` | `dont-dry maintenance page` | Heading printed on the page (the default follows `LOCALE`) |

@@ -15,6 +15,9 @@ log = logging.getLogger(__name__)
 
 HEARTBEAT = "heartbeat"
 LAST_RUN = "last-run.json"
+# Written before a scheduled print and removed after its report: if it is still there, dont-dry
+# stopped in the middle of a print, and a page may have come out
+SENDING = "sending.json"
 
 _FLAGS = os.O_CREAT | os.O_EXCL | os.O_WRONLY
 _warned: set[str] = set()  # warn once per file, not on every heartbeat
@@ -39,6 +42,13 @@ def write(state_dir: str, name: str, payload: dict[str, Any]) -> None:
             log.warning("cannot write %s (set STATE_DIR to a writable folder): %s", path, exc)
         return
     _warned.discard(name)
+
+
+def remove(state_dir: str, name: str) -> None:
+    try:
+        (Path(state_dir) / name).unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("cannot remove %s: %s", Path(state_dir) / name, exc)
 
 
 def read(state_dir: str, name: str) -> dict[str, Any] | None:
