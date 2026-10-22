@@ -18,9 +18,21 @@ def _header(value: str) -> str:
     return "=?utf-8?b?" + base64.b64encode(value.encode("utf-8")).decode("ascii") + "?="
 
 
-def send(url: str, title: str, message: str, *, token: str = "", failed: bool = False) -> None:
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """urllib would follow a redirect as a GET without the body but with the Authorization
+    header, to whatever host it names: refuse instead (a 3xx becomes an HTTPError)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ARG002
+        return None
+
+
+_opener = urllib.request.build_opener(_NoRedirects)
+
+
+def send(url: str, title: str, message: str, *, token: str = "", failed: bool = False) -> bool:
+    """Posts the notification; True when the server accepted it. Never raises."""
     if not url:
-        return
+        return False
     headers = {
         "Title": _header(title),
         "Tags": "warning" if failed else "printer",
@@ -32,7 +44,9 @@ def send(url: str, title: str, message: str, *, token: str = "", failed: bool = 
     request = urllib.request.Request(url, data=message.encode("utf-8"), headers=headers,
                                      method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
+        with _opener.open(request, timeout=15) as response:
             response.read()
     except Exception as exc:  # notifications must never break printing
         log.warning("could not send notification: %s", exc)
+        return False
+    return True

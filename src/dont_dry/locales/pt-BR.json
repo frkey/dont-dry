@@ -16,6 +16,8 @@
   "notify.title.printed": "dont-dry: página impressa",
   "notify.details": "Detalhes: {message}",
   "notify.ink": "Tinta: {levels}",
+  "notify.test_title": "dont-dry: notificação de teste",
+  "notify.test_body": "Se você está lendo isto, as notificações do dont-dry funcionam.",
   "notify.low_ink": "Tinta baixa: {names}",
 
   "result.printed": "A página foi impressa.",
@@ -51,6 +53,8 @@
   "state.stopped": "parada",
   "state.unknown": "desconhecido",
 
+  "notify_test.sent": "Notificação de teste enviada para {url}.",
+  "notify_test.failed": "A notificação de teste para {url} falhou; veja o aviso acima.",
   "next.header": "Agendamento {schedule!r} no fuso {timezone}:",
   "render.wrote": "Arquivo salvo: {path} ({format}, {size} KB)",
 

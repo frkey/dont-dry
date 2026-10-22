@@ -84,3 +84,27 @@ def test_malformed_urls_are_a_config_error(monkeypatch, value):
     monkeypatch.setenv("PRINTER_URI", value)
     with pytest.raises(ConfigError, match="PRINTER_URI"):
         Config.from_env()
+
+
+@pytest.mark.parametrize("name,value", [
+    ("PRINTER_URI", "ipp://admin:hunter2@192.168.1.50/ipp/print"),
+    ("NOTIFY_URL", "https://alice:hunter2@ntfy.example/topic"),
+])
+def test_credentials_in_urls_are_refused_and_never_echoed(monkeypatch, name, value):
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ConfigError, match="user name or password") as error:
+        Config.from_env()
+    assert "hunter2" not in str(error.value)
+
+
+def test_config_errors_never_echo_a_query_string(monkeypatch):
+    monkeypatch.setenv("NOTIFY_URL", "https://ntfy.example:44x/topic?auth=QmVhcmVy")
+    with pytest.raises(ConfigError) as error:
+        Config.from_env()
+    assert "QmVhcmVy" not in str(error.value) and "ntfy.example" in str(error.value)
+
+
+def test_redact_url():
+    from dont_dry.config import redact_url
+    assert redact_url("https://ntfy.example/topic?auth=abc") == "https://ntfy.example/topic"
+    assert redact_url("ipp://192.168.1.50:631/ipp/print") == "ipp://192.168.1.50:631/ipp/print"

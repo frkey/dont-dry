@@ -10,6 +10,8 @@ All notable changes to dont-dry are listed here. The format follows
 
 - When dont-dry starts after missing a scheduled print (the machine was off or dont-dry was
   stopped), it prints once to catch up. `CATCH_UP=false` turns this off.
+- `dont-dry notify-test` sends a test notification, so a wrong `NOTIFY_URL` or token shows up
+  before the day the printer fails.
 
 ### Fixed
 
@@ -29,6 +31,8 @@ All notable changes to dont-dry are listed here. The format follows
   a photo prints upright.
 - `CUSTOM_PAGE` is checked at start-up (missing, unreadable, not a PDF or an image), and a
   malformed URL in a setting is a clean configuration error instead of a traceback.
+- A low ink level notifies when it first reaches `LOW_INK_THRESHOLD` or drops further, not at
+  every print until the ink is refilled.
 - PWG Raster is encoded row by row: at 600 dpi it needs about a third of the memory it did. A
   printer that lists only non-square PWG resolutions gets another format.
 - A schedule with prints less than 3 hours apart (such as `* 9 * * 1`, sixty pages every Monday)
@@ -37,6 +41,14 @@ All notable changes to dont-dry are listed here. The format follows
   for it. Pages printed with the `dont-dry` command of the systemd install are recorded too, and
   `docker-compose.yml` keeps the record in a volume (`STATE_DIR=/var/lib/dont-dry`), so it
   survives restarts.
+
+### Security
+
+- Notifications no longer follow redirects, which forwarded `NOTIFY_TOKEN` to whatever address
+  the redirect named.
+- A user name or password in `PRINTER_URI` or `NOTIFY_URL` is refused at start-up (it was never
+  used, only logged), and logs and error messages leave out URL query strings, where an ntfy
+  token can sit.
 
 ## [0.1.0] - 2026-10-22
 
