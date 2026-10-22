@@ -199,7 +199,7 @@ confere todas ao iniciar e para com uma mensagem clara se alguma estiver errada.
 | `RETRY_DELAY` | `300` | Segundos entre as tentativas |
 | `JOB_TIMEOUT` | `300` | Segundos de espera para o trabalho terminar |
 | `LOW_INK_THRESHOLD` | `10` | Avisa quando uma tinta está nesta porcentagem ou abaixo |
-| `NOTIFY_URL` | | URL que recebe um POST em texto simples, ex.: `https://ntfy.sh/meu-topico` |
+| `NOTIFY_URL` | | URL que recebe um POST em texto simples, ex.: `https://ntfy.sh/meu-topico` (sem usuário nem senha nela: use `NOTIFY_TOKEN`) |
 | `NOTIFY_TOKEN` | | Token *bearer* opcional para a URL de notificação |
 | `NOTIFY_ON` | `failure` | `failure` (também tinta baixa), `always` ou `never` |
 | `TLS_VERIFY` | `false` | Verifica o certificado da impressora em `ipps://` |
@@ -216,9 +216,11 @@ novo menos de uma hora depois de uma página que chegou à impressora.
 
 Com o [ntfy](https://ntfy.sh), escolha um tópico longo e aleatório (quem souber o nome consegue
 ler), defina `NOTIFY_URL=https://ntfy.sh/<tópico>` e assine o tópico no app do ntfy. As falhas
-chegam com prioridade alta; uma impressão bem-sucedida só notifica quando alguma tinta está
-baixa, a não ser que `NOTIFY_ON=always`. Qualquer outro webhook que aceite um POST em texto
-simples também serve; o título vai no cabeçalho `Title`.
+chegam com prioridade alta; uma impressão bem-sucedida só notifica quando uma tinta cai até o
+`LOW_INK_THRESHOLD` ou abaixo dele (e não de novo a cada impressão até você reabastecer), a não ser
+que `NOTIFY_ON=always`. Qualquer outro webhook que aceite um POST em texto simples também serve;
+o título vai no cabeçalho `Title`. Redirecionamentos não são seguidos, então use em `NOTIFY_URL` o
+endereço final. Para conferir a configuração: `dont-dry notify-test`.
 
 ## Comandos
 
@@ -228,6 +230,7 @@ dont-dry print          # imprime agora (--retry para tentar de novo como o agen
 dont-dry info           # estado da impressora, formatos aceitos, níveis de tinta
 dont-dry next -n 5      # próximos horários de impressão para SCHEDULE/TZ
 dont-dry render out.pdf # salva a página de teste localmente (.pdf, .png, .jpg ou .pwg)
+dont-dry notify-test    # envia uma notificação de teste para NOTIFY_URL
 dont-dry healthcheck    # sai com 0 se o agendador está vivo (usado pela imagem)
 ```
 

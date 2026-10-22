@@ -21,7 +21,10 @@ dont-dry is meant to run on a home or office **local network**, next to the prin
 - **The printer is not fully trusted.** Answers are size-capped and parsed defensively; a
   malformed or oversized answer is reported as a failed print, never a crash.
 - **Settings are checked at start-up.** The printer and notification addresses must be
-  `ipp://`, `ipps://`, `http://` or `https://` URLs; `NOTIFY_TOKEN` is never logged.
+  `ipp://`, `ipps://`, `http://` or `https://` URLs without a user name or password in them.
+  `NOTIFY_TOKEN` is never logged, and logs and messages show URLs without their query string.
+- **Notifications go where you point them.** They never follow a redirect, which would carry
+  the token to another address.
 - **The image is minimal and unprivileged.** It runs as a fixed non-root user, needs no
   capabilities, works with a read-only file system, and installs Python packages at exact
   versions checked against their hashes, on a base image pinned by digest.

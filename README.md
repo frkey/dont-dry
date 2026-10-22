@@ -193,7 +193,7 @@ them all when it starts and stops with a clear message if one is wrong.
 | `RETRY_DELAY` | `300` | Seconds between attempts |
 | `JOB_TIMEOUT` | `300` | Seconds to wait for a job to finish |
 | `LOW_INK_THRESHOLD` | `10` | Warn when an ink is at or below this percentage |
-| `NOTIFY_URL` | | URL that receives a plain-text POST, e.g. `https://ntfy.sh/my-topic` |
+| `NOTIFY_URL` | | URL that receives a plain-text POST, e.g. `https://ntfy.sh/my-topic` (no user name or password in it: use `NOTIFY_TOKEN`) |
 | `NOTIFY_TOKEN` | | Optional bearer token for the notification URL |
 | `NOTIFY_ON` | `failure` | `failure` (also low ink), `always` or `never` |
 | `TLS_VERIFY` | `false` | Verify the printer's certificate for `ipps://` |
@@ -210,9 +210,11 @@ page that reached the printer.
 
 With [ntfy](https://ntfy.sh), pick a long, random topic (anyone who knows it can read it), set
 `NOTIFY_URL=https://ntfy.sh/<topic>` and subscribe to the topic in the ntfy app. Failures arrive
-with high priority; a successful print notifies only when an ink is low, unless
-`NOTIFY_ON=always`. Any other webhook that accepts a plain-text POST works too; the title goes in
-a `Title` header.
+with high priority; a successful print notifies only when an ink drops to `LOW_INK_THRESHOLD` or
+further (not again at every print until you refill it), unless `NOTIFY_ON=always`. Any other
+webhook that accepts a plain-text POST works too; the title goes in a `Title` header. Redirects
+are not followed, so point `NOTIFY_URL` at the final address. Check the setup with
+`dont-dry notify-test`.
 
 ## Commands
 
@@ -222,6 +224,7 @@ dont-dry print          # print now (--retry to retry like the scheduler)
 dont-dry info           # printer status, supported formats, ink levels
 dont-dry next -n 5      # upcoming print times for SCHEDULE/TZ
 dont-dry render out.pdf # save the test page locally (.pdf, .png, .jpg or .pwg)
+dont-dry notify-test    # send a test notification to NOTIFY_URL
 dont-dry healthcheck    # exit 0 if the scheduler is alive (used by the image)
 ```
 

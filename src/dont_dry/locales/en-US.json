@@ -16,6 +16,8 @@
   "notify.title.printed": "dont-dry: page printed",
   "notify.details": "Details: {message}",
   "notify.ink": "Ink: {levels}",
+  "notify.test_title": "dont-dry: test notification",
+  "notify.test_body": "If you can read this, dont-dry's notifications work.",
   "notify.low_ink": "Low ink: {names}",
 
   "result.printed": "The page was printed.",
@@ -51,6 +53,8 @@
   "state.stopped": "stopped",
   "state.unknown": "unknown",
 
+  "notify_test.sent": "Test notification sent to {url}.",
+  "notify_test.failed": "The test notification to {url} failed; see the warning above.",
   "next.header": "Schedule {schedule!r} in {timezone}:",
   "render.wrote": "wrote {path} ({format}, {size} KB)",
 

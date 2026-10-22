@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import __version__, notify, page, pwg, state
-from .config import Config, ConfigError
+from .config import Config, ConfigError, redact_url
 from .i18n import Translator
 from .ipp import IPPClient, IPPError
 from .printer import (PrinterInfo, PrintError, PrintResult, Wait, choose_format, inspect,
@@ -101,8 +101,17 @@ def _report(cfg: Config, result: PrintResult) -> None:
     now = datetime.now(cfg.timezone)
     previous = state.read(cfg.state_dir, state.LAST_RUN) or {}
     low: list[str] = []
+    # Inks at or below the threshold, as last reported: an ink notifies when it first gets
+    # there or drops further, not at every print until it is refilled
+    known_low = previous.get("low_ink") if isinstance(previous.get("low_ink"), dict) else {}
+    low_ink = known_low
+    newly_low: list[str] = []
     if result.printer and result.printer.markers:
         low = _low_ink(result.printer, cfg.low_ink_threshold)
+        levels = {m.name: m.level for m in result.printer.markers}
+        low_ink = {name: levels[name] for name in low}
+        newly_low = [name for name in low
+                     if not isinstance(known_low.get(name), int) or levels[name] < known_low[name]]
         if low:
             log.warning("low ink: %s", ", ".join(low))
     if result.success:
@@ -116,10 +125,11 @@ def _report(cfg: Config, result: PrintResult) -> None:
         "job_id": result.job_id,
         "document_format": result.document_format,
         "ink": {m.name: m.level for m in result.printer.markers} if result.printer else {},
+        "low_ink": low_ink,
     })
     if cfg.notify_on == "never" or not cfg.notify_url:
         return
-    if cfg.notify_on == "always" or not result.success or low:
+    if cfg.notify_on == "always" or not result.success or newly_low:
         title, body = _notification(Translator(cfg.locale), result, low)
         notify.send(cfg.notify_url, title, body, token=cfg.notify_token,
                     failed=not result.success)
@@ -227,8 +237,8 @@ class Scheduler:
 
     def run(self) -> int:
         cfg = self.cfg
-        log.info("dont-dry %s: printer %s, schedule %r (%s)", __version__, cfg.printer_uri,
-                 cfg.schedule, cfg.timezone.key)
+        log.info("dont-dry %s: printer %s, schedule %r (%s)", __version__,
+                 redact_url(cfg.printer_uri), cfg.schedule, cfg.timezone.key)
         self.heartbeat(force=True)
         if cfg.run_on_start:
             log.info("RUN_ON_START is set, printing now")
@@ -328,6 +338,16 @@ def cmd_next(cfg: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_notify_test(cfg: Config, args: argparse.Namespace) -> int:
+    t = Translator(cfg.locale)
+    if not cfg.notify_url:
+        raise ConfigError("NOTIFY_URL is not set (example: https://ntfy.sh/my-printer-topic)")
+    ok = notify.send(cfg.notify_url, t("notify.test_title"), t("notify.test_body"),
+                     token=cfg.notify_token)
+    print(t("notify_test.sent" if ok else "notify_test.failed", url=redact_url(cfg.notify_url)))
+    return 0 if ok else 1
+
+
 def cmd_run(cfg: Config, args: argparse.Namespace) -> int:
     cfg.require_printer()
     scheduler = Scheduler(cfg)
@@ -375,13 +395,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dpi", type=_int_between(50, 1200), default=150)
     p = sub.add_parser("next", help="list the next scheduled print times")
     p.add_argument("-n", "--count", type=_int_between(1, 100), default=5)
+    sub.add_parser("notify-test", help="send a test notification to NOTIFY_URL")
     sub.add_parser("healthcheck", help="exit 0 if the scheduler is alive (for Docker)")
     return parser
 
 
 COMMANDS = {
     "run": cmd_run, "print": cmd_print, "info": cmd_info, "render": cmd_render,
-    "next": cmd_next, "healthcheck": cmd_healthcheck,
+    "next": cmd_next, "notify-test": cmd_notify_test, "healthcheck": cmd_healthcheck,
 }
 
 

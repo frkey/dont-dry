@@ -370,3 +370,36 @@ def test_the_sending_mark_is_cleared_after_the_report(cfg, monkeypatch):
     _fake_prints(monkeypatch, PrintResult(False, "asleep"))
     cli.Scheduler(cfg).print_now()
     assert state.read(cfg.state_dir, state.SENDING) is None
+
+
+# -- notifications ------------------------------------------------------------------
+
+
+def test_low_ink_notifies_when_it_drops_not_at_every_print(monkeypatch):
+    monkeypatch.setenv("NOTIFY_URL", "https://ntfy.example/topic")
+    cfg = Config.from_env()
+    sent = []
+    monkeypatch.setattr(cli.notify, "send", lambda url, title, message, **kw: sent.append(title))
+    for levels in ([50, 8], [50, 8], [50, 5], [50, 90], [50, 8]):
+        cli._report(cfg, PrintResult(True, "ok", printer=_printer(levels)))
+    # 8: first drop; 8 again: quiet; 5: further drop; 90: refilled, quiet; 8: low again
+    assert sent == ["dont-dry: page printed, ink low"] * 3
+
+
+def test_notify_test_sends_a_translated_test(monkeypatch, capsys):
+    monkeypatch.setenv("NOTIFY_URL", "https://ntfy.example/topic")
+    monkeypatch.setenv("LOCALE", "pt-BR")
+    sent = []
+    monkeypatch.setattr(cli.notify, "send",
+                        lambda url, title, message, **kw: sent.append((title, message)) or True)
+    assert cli.main(["notify-test"]) == 0
+    assert sent == [("dont-dry: notificação de teste",
+                     "Se você está lendo isto, as notificações do dont-dry funcionam.")]
+    assert "enviada" in capsys.readouterr().out
+
+
+def test_notify_test_fails_without_a_url_or_when_refused(monkeypatch, capsys):
+    assert cli.main(["notify-test"]) == 2                # NOTIFY_URL is not set
+    monkeypatch.setenv("NOTIFY_URL", "https://ntfy.example/topic")
+    monkeypatch.setattr(cli.notify, "send", lambda *a, **kw: False)
+    assert cli.main(["notify-test"]) == 1

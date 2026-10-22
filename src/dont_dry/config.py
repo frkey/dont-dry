@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import i18n
@@ -65,10 +65,22 @@ def _int(name: str, default: int, minimum: int = 0, maximum: int | None = None) 
     return value
 
 
+def redact_url(url: str) -> str:
+    """The URL without credentials or query string, for logs and messages: an ntfy token can
+    sit in "?auth=", and "user:password@" in front of the host."""
+    try:
+        parts = urlsplit(url)
+        netloc = parts.netloc.rpartition("@")[2]
+        return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    except ValueError:
+        return url.split("?", 1)[0].rpartition("@")[2]
+
+
 def _url(name: str, schemes: tuple[str, ...], example: str) -> str:
     value = _str(name)
     if not value:
         return ""
+    shown = redact_url(value)
     try:
         parts = urlsplit(value)
         host = parts.hostname
@@ -76,11 +88,14 @@ def _url(name: str, schemes: tuple[str, ...], example: str) -> str:
         host = None
     if host is None or parts.scheme.lower() not in schemes:
         raise ConfigError(f"{name} must be a {' or '.join(s + '://' for s in schemes)} URL "
-                          f"(example: {example}), got {value!r}")
+                          f"(example: {example}), got {shown!r}")
+    if "@" in parts.netloc:
+        raise ConfigError(f"{name} must not hold a user name or password ({shown!r}); for "
+                          "notifications, put the token in NOTIFY_TOKEN")
     try:
         parts.port  # noqa: B018 - raises ValueError for a port that is not a number
     except ValueError:
-        raise ConfigError(f"{name} has an invalid port: {value!r}") from None
+        raise ConfigError(f"{name} has an invalid port: {shown!r}") from None
     return value
 
 
