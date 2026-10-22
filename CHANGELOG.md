@@ -6,6 +6,15 @@ All notable changes to dont-dry are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- In a Proxmox container, the `dont-dry` command (and with it the installer's printer check and
+  test page) failed without a word when run from a terminal, such as the Proxmox web Shell:
+  systemd could not hand the host's terminal to the service user. The command no longer passes
+  its input on, and the installer says when the command itself could not start.
+- The documented `pct exec <id> -- ...` commands use `/usr/local/bin/dont-dry`, since `pct exec`
+  runs without `/usr/local/bin` in its `PATH`.
+
 ## [0.2.0] - 2026-10-22
 
 Never a page more than the schedule asks for, and a safer installer and release chain.

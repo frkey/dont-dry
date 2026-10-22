@@ -141,8 +141,8 @@ No dia a dia, a partir do host do Proxmox:
 
 | Tarefa | Comando |
 |---|---|
-| Estado da impressora e tinta | `pct exec <id> -- dont-dry info` |
-| Imprimir uma página agora | `pct exec <id> -- dont-dry print` |
+| Estado da impressora e tinta | `pct exec <id> -- /usr/local/bin/dont-dry info` |
+| Imprimir uma página agora | `pct exec <id> -- /usr/local/bin/dont-dry print` |
 | Mudar uma configuração | `pct exec <id> -- nano /etc/dont-dry.env`, depois `pct exec <id> -- systemctl restart dont-dry` |
 | Acompanhar o log | `pct exec <id> -- journalctl -u dont-dry -f` |
 | Atualizar o dont-dry | `pct exec <id> -- env LC_ALL=C.UTF-8 bash /opt/dont-dry/deploy/install.sh` |
