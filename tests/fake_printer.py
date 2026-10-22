@@ -29,13 +29,15 @@ def encode_response(status: int, request_id: int,
 class FakePrinter:
     def __init__(self, formats=("application/pdf", "image/pwg-raster", "image/jpeg"),
                  pwg_types=("srgb_8", "sgray_8"), accepting=True, final_state=9,
-                 reject_status=None, host="127.0.0.1", port=0, on_job=None):
+                 reject_status=None, host="127.0.0.1", port=0, on_job=None,
+                 drop_print_answer=False):
         self.formats = list(formats)
         self.pwg_types = list(pwg_types)
         self.accepting = accepting
         self.final_state = final_state
         self.reject_status = reject_status
         self.on_job = on_job  # called with each job before Print-Job is answered
+        self.drop_print_answer = drop_print_answer  # keep the job, then hang up without answering
         self.jobs: list[dict] = []
         self.requests: list[int] = []
         self.printer_uris: list[str] = []
@@ -50,6 +52,9 @@ class FakePrinter:
                 body = self.rfile.read(int(self.headers["Content-Length"]))
                 request, offset = ipp.decode_message(body)
                 payload = printer.handle(request, body[offset:])
+                if printer.drop_print_answer and request.status == ipp.OP_PRINT_JOB:
+                    self.close_connection = True
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "application/ipp")
                 self.send_header("Content-Length", str(len(payload)))

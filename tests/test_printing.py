@@ -255,3 +255,97 @@ def test_fake_printer_reports_a_job_before_answering(env):
         result = print_page(env(printer))
         assert result.success
         assert [job["id"] for job in seen] == [1]
+
+
+# -- a lost answer, odd attributes, slow printers -------------------------------------
+
+
+def test_a_lost_print_job_answer_is_never_resent(env):
+    from dont_dry import cli
+    with FakePrinter(drop_print_answer=True) as printer:
+        cfg = env(printer, RETRIES="3", RETRY_DELAY="0")
+        result = cli._attempt(cfg, cfg.retries)
+    assert len(printer.jobs) == 1                       # one page, even with three retries left
+    assert not result.success and not result.retryable
+    assert result.reason == "answer_lost" and result.reached_printer
+
+
+def test_odd_attribute_types_are_unknown_not_a_crash():
+    from dont_dry.printer import PrinterInfo
+    info = PrinterInfo.from_attributes({
+        "printer-state": [{"member": [1]}],
+        "printer-state-reasons": [{"x": [1]}, "media-empty-error"],
+        "printer-name": ["Evil\x1b[2J\x07Printer\nFAKE\u00a0LOG LINE"],
+        "printer-is-accepting-jobs": [True],
+    })
+    assert info.state == "unknown"
+    assert info.state_reasons == ["media-empty-error"]
+    assert info.name == "Evil[2JPrinter FAKE LOG LINE"  # no escape or bell; spaces stay spaces
+
+
+def test_odd_job_state_is_unknown_not_a_crash():
+    from dont_dry.ipp import Response
+    from dont_dry.printer import _wait_for_job
+
+    class Client:
+        def get_job_attributes(self, job_id):
+            return Response(0, 1, [("job", {"job-state": [{"x": [9]}],
+                                            "job-state-reasons": [{"y": [1]}, "none"]})])
+
+    reason, state, _ = _wait_for_job(Client(), 1, timeout=10, wait=lambda seconds: False)
+    assert (reason, state) == ("stopped", "unknown")
+
+
+def test_a_printer_that_answers_too_slowly_hits_the_deadline():
+    import socket
+    import threading
+    import time
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen()
+
+    def drip():  # accepts, then sends one header byte every 0.1 s, forever
+        conn, _ = server.accept()
+        conn.recv(65536)
+        with conn:
+            try:
+                while True:
+                    conn.sendall(b"X")
+                    time.sleep(0.1)
+            except OSError:
+                pass
+
+    threading.Thread(target=drip, daemon=True).start()
+    client = ipp.IPPClient(f"ipp://127.0.0.1:{server.getsockname()[1]}/ipp/print",
+                           timeout=5, deadline=1)
+    started = time.monotonic()
+    with pytest.raises(ipp.IPPError, match="within 1 s"):
+        client.get_printer_attributes(["printer-state"])
+    assert time.monotonic() - started < 4
+    server.close()
+
+
+def test_an_http_refusal_of_print_job_is_not_a_lost_answer(env, monkeypatch):
+    from http.server import BaseHTTPRequestHandler
+
+    from dont_dry import cli
+    with FakePrinter() as printer:
+        handler = printer.server.RequestHandlerClass
+        original = handler.do_POST
+
+        def refuse_print_job(self):  # answers Print-Job with HTTP 401, as a printer wanting a login
+            length = int(self.headers["Content-Length"])
+            body = self.rfile.read(length)
+            if body[2:4] == b"\x00\x02":  # Print-Job
+                BaseHTTPRequestHandler.send_error(self, 401, "Unauthorized")
+                return
+            self.rfile = __import__("io").BytesIO(body)
+            original(self)
+
+        monkeypatch.setattr(handler, "do_POST", refuse_print_job)
+        cfg = env(printer, RETRIES="3", RETRY_DELAY="0")
+        result = cli._attempt(cfg, cfg.retries)
+    assert not result.success and not result.retryable
+    assert result.reason == "rejected" and not result.reached_printer
+    assert "HTTP 401" in result.message

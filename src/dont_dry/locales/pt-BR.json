@@ -27,6 +27,7 @@
   "result.no_format": "A impressora não aceita nenhum dos formatos que o dont-dry sabe enviar.",
   "result.bad_document": "O dont-dry não conseguiu preparar a página.",
   "result.rejected": "A impressora recusou a página.",
+  "result.answer_lost": "A impressora pode ter impresso a página, mas a resposta dela se perdeu; o dont-dry não a enviou de novo.",
   "result.canceled": "O trabalho foi cancelado.",
   "result.aborted": "A impressora abortou o trabalho.",
   "result.timeout": "O trabalho não terminou a tempo; a página ainda pode sair.",

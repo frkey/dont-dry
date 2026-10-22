@@ -238,6 +238,7 @@ Com Docker: `docker compose exec dont-dry dont-dry info`, ou `docker compose run
 | Mensagem | O que fazer |
 |---|---|
 | `cannot reach printer at ...` | Confira o IP, se a impressora está ligada e se a porta TCP 631 está liberada entre o dont-dry e ela. Impressoras dormindo costumam acordar até a próxima tentativa. |
+| `lost the printer's answer ...; the page may have printed, so it was not sent again` | A página foi enviada, mas a impressora não confirmou (desligou a conexão ou demorou mais de dois minutos para responder). Confira a bandeja antes de imprimir de novo à mão. |
 | `printer answered HTTP 404` | O caminho está errado: tente `/ipp/print`, depois `/ipp`. |
 | `printer supports none of application/pdf, image/pwg-raster, image/jpeg` | A impressora não imprime sem driver (IPP Everywhere / AirPrint), então o dont-dry não consegue falar com ela. |
 | `printer rejected the job: client-error-document-format-not-supported` | Defina `DOCUMENT_FORMAT` com outro formato que o `dont-dry info` liste. |

@@ -232,6 +232,7 @@ With Docker: `docker compose exec dont-dry dont-dry info`, or `docker compose ru
 | You see | What to do |
 |---|---|
 | `cannot reach printer at ...` | Check the IP, that the printer is on, and that TCP 631 is open between dont-dry and the printer. Printers that are asleep usually wake up for the next retry. |
+| `lost the printer's answer ...; the page may have printed, so it was not sent again` | The page went out but the printer never confirmed it (it hung up, or took longer than two minutes to answer). Check the paper tray before printing again by hand. |
 | `printer answered HTTP 404` | The path is wrong: try `/ipp/print`, then `/ipp`. |
 | `printer supports none of application/pdf, image/pwg-raster, image/jpeg` | The printer does not do driverless printing (IPP Everywhere / AirPrint), so dont-dry cannot talk to it. |
 | `printer rejected the job: client-error-document-format-not-supported` | Set `DOCUMENT_FORMAT` to another format that `dont-dry info` lists. |

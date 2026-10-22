@@ -18,6 +18,13 @@ All notable changes to dont-dry are listed here. The format follows
   printed again about every 30 seconds. The systemd unit no longer restarts on a configuration
   error.
 - When daylight saving time ends, a time in the repeated hour prints once, not twice.
+- A page is never sent twice when the printer's answer to it is lost (a dropped connection, a
+  timeout, a broken answer): only failures before anything was sent are retried.
+- A printer that sends unexpected attribute types no longer crashes `dont-dry info` or a print,
+  and text from the printer is cleaned of control characters before it reaches the terminal or
+  the log.
+- Each request to the printer has a two-minute deadline, so a printer that answers a byte at a
+  time cannot hold the scheduler.
 - A schedule with prints less than 3 hours apart (such as `* 9 * * 1`, sixty pages every Monday)
   is refused at start-up.
 - dont-dry never prints again within an hour of a page that reached the printer, whatever asks

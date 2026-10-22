@@ -27,6 +27,7 @@
   "result.no_format": "The printer accepts none of the formats dont-dry can send.",
   "result.bad_document": "dont-dry could not prepare the page.",
   "result.rejected": "The printer refused the page.",
+  "result.answer_lost": "The printer may have printed the page, but its answer was lost; dont-dry did not send it again.",
   "result.canceled": "The job was canceled.",
   "result.aborted": "The printer aborted the job.",
   "result.timeout": "The job did not finish in time; the page may still come out.",

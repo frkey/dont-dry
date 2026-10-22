@@ -6,9 +6,12 @@ Get-Job-Attributes over ipp:// (HTTP) or ipps:// (HTTPS).
 
 from __future__ import annotations
 
+import contextlib
 import http.client
+import socket
 import ssl
 import struct
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -99,6 +102,16 @@ PRINTER_STATES = {3: "idle", 4: "processing", 5: "stopped"}
 
 class IPPError(Exception):
     """Transport or protocol failure talking to the printer."""
+
+
+class IPPAnswerLost(IPPError):
+    """The request went out, but no usable answer came back: the printer may have acted on it
+    (for Print-Job, the page may be printing)."""
+
+
+class IPPRefused(IPPError):
+    """The printer's web server refused the request (an HTTP 4xx such as 401 for a login):
+    nothing was done, and trying again would not help."""
 
 
 @dataclass(frozen=True)
@@ -328,7 +341,8 @@ def _decode_message(data: bytes) -> tuple[Response, int]:
 
 class IPPClient:
     def __init__(self, uri: str, *, verify_tls: bool = False, timeout: float = 60.0,
-                 user: str = "dont-dry"):
+                 deadline: float = 120.0, user: str = "dont-dry"):
+        """`timeout` limits each network operation; `deadline`, a whole request."""
         parts = urlsplit(uri)
         if parts.scheme not in ("ipp", "ipps", "http", "https"):
             raise ValueError(f"unsupported printer URI scheme: {uri!r} (use ipp:// or ipps://)")
@@ -343,6 +357,7 @@ class IPPClient:
         self.port = parts.port or default_port
         self.verify_tls = verify_tls
         self.timeout = timeout
+        self.deadline = deadline
         self.user = user
         self._request_id = 0
 
@@ -369,22 +384,51 @@ class IPPClient:
         self._request_id += 1
         body = encode_request(operation, self._request_id, operation_attrs, job_attrs) + document
         conn = self._connection()
+        # A printer that answers a byte at a time never trips the per-operation timeout: past
+        # the deadline, shut the socket down, which wakes up whatever is blocked on it
+        expired = threading.Event()
+        timer = threading.Timer(self.deadline, self._expire, (conn, expired))
+        timer.daemon = True
+        timer.start()
         try:
-            conn.request("POST", self.path, body=body, headers={
-                "Content-Type": "application/ipp",
-                "Content-Length": str(len(body)),
-            })
-            http_response = conn.getresponse()
-            payload = http_response.read(MAX_RESPONSE + 1)
-        except (OSError, http.client.HTTPException) as exc:
-            raise IPPError(f"cannot reach printer at {self.host}:{self.port}: {exc}") from exc
+            try:
+                conn.connect()  # nothing was sent yet: a failure here is safe to retry
+            except (OSError, http.client.HTTPException) as exc:
+                raise IPPError(f"cannot reach printer at {self.host}:{self.port}: {exc}") from exc
+            try:
+                conn.request("POST", self.path, body=body, headers={
+                    "Content-Type": "application/ipp",
+                    "Content-Length": str(len(body)),
+                })
+                http_response = conn.getresponse()
+                payload = http_response.read(MAX_RESPONSE + 1)
+            except (OSError, http.client.HTTPException) as exc:
+                why = f"no complete answer within {self.deadline:g} s" if expired.is_set() else exc
+                raise IPPAnswerLost(f"lost the printer's answer ({self.host}:{self.port}): "
+                                    f"{why}") from exc
         finally:
+            timer.cancel()
             conn.close()
+        if 400 <= http_response.status < 500 and http_response.status != 408:
+            raise IPPRefused(f"printer answered HTTP {http_response.status} "
+                             f"{http_response.reason}")
         if http_response.status != 200:
-            raise IPPError(f"printer answered HTTP {http_response.status} {http_response.reason}")
+            raise IPPAnswerLost(f"printer answered HTTP {http_response.status} "
+                                f"{http_response.reason}")
         if len(payload) > MAX_RESPONSE:
-            raise IPPError(f"printer answer is larger than {MAX_RESPONSE // 1024 // 1024} MB")
-        return decode_response(payload)
+            raise IPPAnswerLost(f"printer answer is larger than {MAX_RESPONSE // 1024 // 1024} MB")
+        try:
+            return decode_response(payload)
+        except IPPError as exc:
+            raise IPPAnswerLost(str(exc)) from None
+
+    @staticmethod
+    def _expire(conn: http.client.HTTPConnection, expired: threading.Event) -> None:
+        expired.set()
+        sock = conn.sock  # once: the request may be closing it right now
+        if sock is not None:
+            with contextlib.suppress(OSError):
+                sock.shutdown(socket.SHUT_RDWR)
 
     # -- operations ---------------------------------------------------------
 
