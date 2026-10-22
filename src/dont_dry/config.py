@@ -99,9 +99,9 @@ def _custom_page() -> str:
                           "it, such as /etc/dont-dry/)") from None
     if not is_pdf:
         from PIL import Image
-        try:
-            with Image.open(path) as image:
-                image.verify()
+        try:  # the header is enough to know it is an image, and cheap for every healthcheck
+            with Image.open(path):
+                pass
         except Exception as exc:  # Pillow raises many kinds for a file it cannot read
             raise ConfigError(f"CUSTOM_PAGE {path!r} is neither a PDF nor an image Pillow can "
                               f"read: {exc}") from None
