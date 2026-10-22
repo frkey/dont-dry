@@ -17,7 +17,8 @@ All notable changes to dont-dry are listed here. The format follows
   is refused at start-up.
 - dont-dry never prints again within an hour of a page that reached the printer, whatever asks
   for it. Pages printed with the `dont-dry` command of the systemd install are recorded too, and
-  `docker-compose.yml` keeps the record in a volume, so it survives restarts.
+  `docker-compose.yml` keeps the record in a volume (`STATE_DIR=/var/lib/dont-dry`), so it
+  survives restarts.
 
 ## [0.1.0] - 2026-10-22
 

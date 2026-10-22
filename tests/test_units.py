@@ -143,3 +143,9 @@ def test_reasonable_schedules_pass_the_check(expr):
 def test_check_finds_schedules_that_never_fire():
     with pytest.raises(CronError, match="never fires"):
         Cron("0 9 30 2 *").check(datetime(2026, 10, 21, 8, 0, tzinfo=SP))
+
+
+def test_check_measures_the_gap_on_the_wall_clock():
+    # 02:00 does not exist on 2026-03-29 in Berlin (it prints at 03:00), yet the schedule is
+    # three hours apart every day: it must not be refused depending on when dont-dry starts
+    Cron("0 2,5 * * *").check(datetime(2026, 3, 20, 12, 0, tzinfo=BERLIN))

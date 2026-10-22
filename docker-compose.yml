@@ -5,10 +5,13 @@ services:
     container_name: dont-dry
     restart: unless-stopped
     env_file: .env
+    environment:
+      STATE_DIR: /var/lib/dont-dry
     # dont-dry needs no privileges and writes only to its state volume
     read_only: true
     tmpfs:
       - /tmp
+    # Remembers the last print across restarts. A host folder instead must be writable by uid 10001.
     volumes:
       - state:/var/lib/dont-dry
     cap_drop:

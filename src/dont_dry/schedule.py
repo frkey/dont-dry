@@ -121,13 +121,16 @@ class Cron:
                 return when
 
     def check(self, now: datetime) -> list[datetime]:
-        """The upcoming prints after `now`. Raises CronError when the schedule never fires, or
-        when two prints are less than MIN_GAP apart."""
+        """The wall-clock times of the upcoming prints after `now`. Raises CronError when the
+        schedule never fires, or when two prints are less than MIN_GAP apart on the wall clock
+        (in instants, a daylight saving change would make a three-hour schedule look shorter
+        on one day of the year)."""
+        start = now.replace(tzinfo=None, fold=0)
         times: list[datetime] = []
-        when = now
-        while len(times) < CHECK_PRINTS and when - now < CHECK_HORIZON:
-            when = self.next_after(when)
-            if times and when.timestamp() - times[-1].timestamp() < MIN_GAP.total_seconds():
+        when = start
+        while len(times) < CHECK_PRINTS and when - start < CHECK_HORIZON:
+            when = self._next_wall(when)
+            if times and when - times[-1] < MIN_GAP:
                 hours = int(MIN_GAP.total_seconds() // 3600)
                 raise CronError(
                     f"SCHEDULE {self.expression!r} prints at {times[-1]:%Y-%m-%d %H:%M} and "

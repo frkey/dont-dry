@@ -197,7 +197,7 @@ them all when it starts and stops with a clear message if one is wrong.
 | `NOTIFY_ON` | `failure` | `failure` (also low ink), `always` or `never` |
 | `TLS_VERIFY` | `false` | Verify the printer's certificate for `ipps://` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR` |
-| `STATE_DIR` | `~/.local/state/dont-dry` | Where the heartbeat and `last-run.json` go (`/var/lib/dont-dry` in the image, a volume in `docker-compose.yml`) |
+| `STATE_DIR` | `~/.local/state/dont-dry` | Where the heartbeat and `last-run.json` go (`/tmp/dont-dry` in the image; `docker-compose.yml` uses a volume on `/var/lib/dont-dry`) |
 
 A retry only happens when the job never reached the printer (it was asleep, offline, busy or not
 accepting jobs). If the printer accepted a job and then aborted it, dont-dry reports the failure
@@ -237,7 +237,7 @@ With Docker: `docker compose exec dont-dry dont-dry info`, or `docker compose ru
 | `job N processing (still processing after 300s)` | The printer was busy, for example cleaning its heads. Raise `JOB_TIMEOUT`. |
 | `printer is not accepting jobs (...)` | The printer is paused or shows an error on its panel (the reasons in parentheses say which). Fix it there; dont-dry retries on its own. |
 | `Release vX.Y.Z is not signed with the dont-dry release key` | The installer refused a release it could not verify, and nothing changed. Please report it: it should not happen. |
-| `a page reached the printer N minutes ago; not printing again so soon` | Nothing is wrong: a page went out less than an hour ago (for example just before a restart), so this one is skipped. `dont-dry print` prints anyway. |
+| `a page reached the printer N minutes ago; not printing again so soon` | Nothing is wrong: a page went out less than an hour ago (just before a restart, or printed by hand), so this one is skipped. `dont-dry print` prints anyway. |
 | `SCHEDULE ... less than 3 hours apart` | Check the minute and hour fields: `* 9 * * 1` is every minute from 09:00 to 09:59; `0 9 * * 1` is 09:00 on Mondays. |
 | The container is `unhealthy` | Read `docker compose logs dont-dry`: the scheduler stopped or cannot write its heartbeat to `STATE_DIR`. |
 | Lines missing or streaky on the page | That is what the page is for: run the head cleaning from the printer's menu or app, then `dont-dry print`. If it keeps happening, print more often. |

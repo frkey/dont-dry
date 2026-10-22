@@ -203,7 +203,7 @@ confere todas ao iniciar e para com uma mensagem clara se alguma estiver errada.
 | `NOTIFY_ON` | `failure` | `failure` (também tinta baixa), `always` ou `never` |
 | `TLS_VERIFY` | `false` | Verifica o certificado da impressora em `ipps://` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` ou `ERROR` |
-| `STATE_DIR` | `~/.local/state/dont-dry` | Onde ficam o heartbeat e o `last-run.json` (`/var/lib/dont-dry` na imagem, um volume no `docker-compose.yml`) |
+| `STATE_DIR` | `~/.local/state/dont-dry` | Onde ficam o heartbeat e o `last-run.json` (`/tmp/dont-dry` na imagem; o `docker-compose.yml` usa um volume em `/var/lib/dont-dry`) |
 
 Só há nova tentativa quando o trabalho nem chegou à impressora (ela estava dormindo, desligada,
 ocupada ou sem aceitar trabalhos). Se a impressora aceitou o trabalho e depois o abortou, o
@@ -243,7 +243,7 @@ Com Docker: `docker compose exec dont-dry dont-dry info`, ou `docker compose run
 | `job N processing (still processing after 300s)` | A impressora estava ocupada, por exemplo limpando as cabeças. Aumente o `JOB_TIMEOUT`. |
 | `printer is not accepting jobs (...)` | A impressora está pausada ou mostra um erro no painel (os motivos entre parênteses dizem qual). Resolva lá; o dont-dry tenta de novo sozinho. |
 | `A versão vX.Y.Z não está assinada com a chave de releases do dont-dry` | O instalador recusou uma versão que não conseguiu conferir, e nada mudou. Por favor, avise: isso não deveria acontecer. |
-| `a page reached the printer N minutes ago; not printing again so soon` | Não há nada errado: uma página saiu há menos de uma hora (por exemplo, logo antes de um reinício), então esta foi pulada. `dont-dry print` imprime mesmo assim. |
+| `a page reached the printer N minutes ago; not printing again so soon` | Não há nada errado: uma página saiu há menos de uma hora (logo antes de um reinício, ou impressa à mão), então esta foi pulada. `dont-dry print` imprime mesmo assim. |
 | `SCHEDULE ... less than 3 hours apart` | Confira os campos de minuto e hora: `* 9 * * 1` é a cada minuto das 09:00 às 09:59; `0 9 * * 1` é às 09:00 de segunda. |
 | O contêiner fica `unhealthy` | Leia `docker compose logs dont-dry`: o agendador parou ou não consegue gravar o heartbeat em `STATE_DIR`. |
 | Linhas faltando ou falhadas na página | É para isso que a página serve: rode a limpeza de cabeça pelo menu ou app da impressora e depois `dont-dry print`. Se continuar acontecendo, imprima com mais frequência. |
