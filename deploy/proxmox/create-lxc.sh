@@ -23,6 +23,8 @@ set -euo pipefail
 
 REPO="${DONT_DRY_REPO:-https://github.com/frkey/dont-dry.git}"
 RAW_URL="${DONT_DRY_RAW_URL:-https://raw.githubusercontent.com/frkey/dont-dry}"
+# Each release has install.sh attached, taken from its signed tag
+RELEASES_URL="${DONT_DRY_RELEASES_URL:-https://github.com/frkey/dont-dry/releases/latest/download}"
 REF="${DONT_DRY_REF:-}"  # empty: install.sh picks the latest release
 LOCALE="${DONT_DRY_LOCALE:-}"
 PRINTER=""
@@ -184,10 +186,11 @@ DEPLOY_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 if [ -f "$DEPLOY_DIR/proxmox/create-lxc.sh" ] &&
    [ -f "$DEPLOY_DIR/dont-dry.service" ] && [ -f "$DEPLOY_DIR/install.sh" ]; then
   cp "$DEPLOY_DIR/install.sh" "$INSTALLER"
+elif [ -n "$REF" ]; then
+  curl -fsSL "$RAW_URL/$REF/deploy/install.sh" -o "$INSTALLER"
 else
-  # master's installer when no --ref: it fetches the latest release and finishes with that
-  # release's own installer
-  curl -fsSL "$RAW_URL/${REF:-master}/deploy/install.sh" -o "$INSTALLER"
+  # the latest release's installer, which then checks that release's signature
+  curl -fsSL "$RELEASES_URL/install.sh" -o "$INSTALLER"
 fi
 
 # newest_template VERSION: newest debian-VERSION-standard template, available or downloaded

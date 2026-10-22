@@ -31,14 +31,21 @@ dont-dry is meant to run on a home or office **local network**, next to the prin
 - **The systemd unit is sandboxed.** A throwaway user that can only write `/var/lib/dont-dry`,
   with no capabilities and a system call filter. Its settings file, `/etc/dont-dry.env`, is
   readable by root only.
+- **First installs start from a release.** The documented commands download `install.sh` and
+  `create-lxc.sh` attached to the latest release, which CI takes from the signed tag, with a
+  `SHA256SUMS` file to check them.
 - **Installs are verified.** `deploy/install.sh` (also run by the Proxmox script) installs a
   release only when its tag is signed with the dont-dry release key and names itself with that
   same version, and the Python packages at exact versions checked against their hashes. An
   update never moves back to an older release. A branch or tag you name with `--ref` is
   installed as it is.
-- **The supply chain is pinned.** CI runs with a read-only token, pins its actions by commit,
-  audits the locked packages for known vulnerabilities every week, and publishes images with
-  provenance and an SBOM. Dependabot proposes updates.
+- **Images come from signed tags.** CI publishes release images only from a tag signed with a
+  key in `master`'s `RELEASE_SIGNERS`, with a provenance attestation:
+  `gh attestation verify oci://ghcr.io/frkey/dont-dry:latest --owner frkey`.
+- **The supply chain is pinned.** CI runs with a read-only token that checkouts do not keep,
+  pins its actions by commit and its own tools with hashes, audits the locked packages for known
+  vulnerabilities every week, and publishes images with provenance and an SBOM. Dependabot
+  proposes updates.
 
 ## Known limits
 

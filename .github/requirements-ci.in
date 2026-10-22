@@ -1,0 +1,4 @@
+# CI's own tools. Compiled with the project's dev extra into requirements-ci.txt (the command is at
+# its top), constrained to deploy/requirements.txt so CI tests the versions servers install.
+setuptools>=68
+pip-audit==2.10.1

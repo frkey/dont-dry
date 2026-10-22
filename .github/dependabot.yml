@@ -6,6 +6,10 @@ updates:
     directory: /deploy
     schedule:
       interval: weekly
+  - package-ecosystem: pip
+    directory: /.github
+    schedule:
+      interval: weekly
   - package-ecosystem: docker
     directory: /
     schedule:

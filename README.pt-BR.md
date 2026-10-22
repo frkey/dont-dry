@@ -108,9 +108,12 @@ TCP 631 entre as duas.
 No host do Proxmox (o **Shell** do nó na interface web, ou SSH como root):
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/frkey/dont-dry/master/deploy/proxmox/create-lxc.sh
+curl -fsSLO https://github.com/frkey/dont-dry/releases/latest/download/create-lxc.sh
 bash create-lxc.sh --locale pt-BR --printer ipp://192.168.1.50/ipp/print
 ```
+
+Os dois scripts vêm da última versão publicada. Para conferir o download antes, baixe também os
+checksums da versão e rode `curl -fsSLO https://github.com/frkey/dont-dry/releases/latest/download/SHA256SUMS && sha256sum --ignore-missing -c SHA256SUMS`.
 
 Ele cria um container Debian sem privilégios (1 núcleo, 256 MB de RAM, 2 GB de disco, iniciado
 no boot, com o fuso horário do host), instala o dont-dry nele como um serviço systemd isolado,
@@ -150,7 +153,7 @@ Em qualquer máquina Debian 12+ ou Ubuntu 22.04+ com systemd (um LXC ou VM que v
 Raspberry Pi), como root:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/frkey/dont-dry/master/deploy/install.sh
+curl -fsSLO https://github.com/frkey/dont-dry/releases/latest/download/install.sh
 bash install.sh --locale pt-BR --printer ipp://192.168.1.50/ipp/print
 ```
 

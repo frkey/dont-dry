@@ -10,16 +10,17 @@ except ModuleNotFoundError:  # Python 3.10
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCK = ROOT / "deploy" / "requirements.txt"
+CI_LOCK = ROOT / ".github" / "requirements-ci.txt"
 
 
 def _name(requirement: str) -> str:
     return re.split(r"[\s<>=!~;\[]", requirement.strip(), maxsplit=1)[0].lower().replace("_", "-")
 
 
-def _entries() -> list[list[str]]:
+def _entries(lock: Path = LOCK) -> list[list[str]]:
     """Each pin with its hashes. A package can be pinned once per Python version range."""
     entries: list[list[str]] = []
-    for line in LOCK.read_text().splitlines():
+    for line in lock.read_text().splitlines():
         if line and not line.startswith((" ", "#")):
             entries.append([line])
         elif entries and line.strip().startswith("--hash="):
@@ -38,3 +39,19 @@ def test_every_dependency_is_pinned_with_hashes():
     for lines in entries:
         assert "==" in lines[0], lines[0]
         assert any(line.startswith("--hash=sha256:") for line in lines[1:]), lines[0]
+
+
+def test_ci_tools_are_pinned_with_hashes_in_the_servers_versions():
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    wanted = {_name(r) for r in project["optional-dependencies"]["dev"]}
+    wanted |= {_name(r) for r in (ROOT / ".github" / "requirements-ci.in").read_text().splitlines()
+               if r.strip() and not r.startswith("#")}
+    entries = _entries(CI_LOCK)
+    assert wanted <= {_name(lines[0]) for lines in entries}, \
+        "run the command at the top of .github/requirements-ci.txt"
+    for lines in entries:
+        assert "==" in lines[0] and any(h.startswith("--hash=sha256:") for h in lines[1:]), lines[0]
+    servers = {lines[0].split(" \\")[0] for lines in _entries()}
+    shared = {lines[0].split(" \\")[0] for lines in entries
+              if _name(lines[0]) in {_name(pin) for pin in servers}}
+    assert shared <= servers, "CI must test the versions in deploy/requirements.txt"
