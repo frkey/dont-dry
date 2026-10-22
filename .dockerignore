@@ -1,0 +1,8 @@
+# Send only what the image needs, so .env (with NOTIFY_TOKEN) never reaches a build
+*
+!pyproject.toml
+!README.md
+!src/
+!deploy/requirements.txt
+**/__pycache__
+**/*.egg-info

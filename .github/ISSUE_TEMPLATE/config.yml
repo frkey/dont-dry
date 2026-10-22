@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/frkey/dont-dry/security/advisories/new
+    about: Please report vulnerabilities privately, not in a public issue.
+  - name: Troubleshooting
+    url: https://github.com/frkey/dont-dry#troubleshooting
+    about: What the common errors mean and how to fix them.

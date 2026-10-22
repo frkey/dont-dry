@@ -1,0 +1,49 @@
+name: Bug report
+description: A page that does not print, a wrong schedule, a notification that never comes...
+labels: ["type: bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. **This repository is public**: never paste
+        `NOTIFY_TOKEN`, a private ntfy topic or anything else from your `.env` that is secret.
+
+        Before filing, the [troubleshooting section](https://github.com/frkey/dont-dry#troubleshooting)
+        may already have the answer.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: input
+    id: printer
+    attributes:
+      label: Printer
+      description: Make, model and, if you know it, the firmware version.
+      placeholder: "Epson EcoTank L3250, firmware 05.20"
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How do you run dont-dry?
+      options:
+        - Docker / Docker Compose
+        - systemd (no Docker)
+        - By hand (pip install)
+    validations:
+      required: true
+  - type: textarea
+    id: info
+    attributes:
+      label: Output of `dont-dry info`
+      description: "With Docker: `docker compose exec dont-dry dont-dry info`."
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: "`docker compose logs --tail 50 dont-dry` or `journalctl -u dont-dry -n 50 --no-pager`, ideally with LOG_LEVEL=DEBUG."
+      render: text

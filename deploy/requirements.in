@@ -1,0 +1,4 @@
+# Besides the dependencies in pyproject.toml, which deploy/requirements.txt is compiled from:
+# the build backend, since the Dockerfile and the systemd install build dont-dry without
+# fetching anything unpinned
+setuptools>=68

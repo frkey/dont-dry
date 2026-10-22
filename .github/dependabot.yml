@@ -1,0 +1,16 @@
+# Weekly pull requests that bump the pinned versions: the lock (with its hashes), the image's
+# base (pinned by digest) and the GitHub Actions, which the workflow pins by commit.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /deploy
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,0 +1,20 @@
+# Personal settings: may hold NOTIFY_TOKEN
+.env
+
+# Rendered pages
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# OS files
+.DS_Store
+Thumbs.db

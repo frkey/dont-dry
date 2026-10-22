@@ -1,0 +1,46 @@
+# systemd unit for running dont-dry without Docker (e.g. in a plain Debian LXC).
+# Install (see "Running on Proxmox" in the README):
+#   sudo cp deploy/dont-dry.service /etc/systemd/system/
+#   sudo systemctl enable --now dont-dry
+[Unit]
+Description=dont-dry inkjet maintenance printer
+Documentation=https://github.com/frkey/dont-dry
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Read by systemd itself, so it can stay private to root (it may hold NOTIFY_TOKEN)
+EnvironmentFile=/etc/dont-dry.env
+ExecStart=/opt/dont-dry/venv/bin/dont-dry run
+Restart=on-failure
+RestartSec=30
+Environment=PYTHONUNBUFFERED=1
+Environment=STATE_DIR=/var/lib/dont-dry
+
+# A throwaway user that can only write /var/lib/dont-dry and reach the network. DynamicUser also
+# implies ProtectSystem=strict, ProtectHome=read-only, PrivateTmp and NoNewPrivileges.
+# In a Proxmox LXC container this sandbox needs the "nesting" feature (on by default).
+DynamicUser=yes
+StateDirectory=dont-dry
+UMask=0077
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectProc=invisible
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

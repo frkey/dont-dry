@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  schedule:
+    - cron: "23 6 * * 1"  # Mondays: the audit also catches advisories published since the last push
+
+# Read-only token; only the image job asks for more, to publish
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - name: Render the test page
+        run: |
+          mkdir -p output
+          dont-dry render output/page-a4.png
+          PAGE_SIZE=letter dont-dry render output/page-letter.png
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: matrix.python == '3.13'
+        with:
+          name: test-page
+          path: output/*.png
+
+  # The pinned versions the image and the systemd install use: they install the way the
+  # Dockerfile installs them, pass the tests and have no known vulnerabilities
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"  # the image's
+      - name: Install as the Dockerfile does
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --require-hashes -r deploy/requirements.txt
+          .venv/bin/pip install --no-deps --no-build-isolation .
+          .venv/bin/pip check
+      - run: .venv/bin/pip install pytest && .venv/bin/pytest -q
+      - run: pip install pip-audit==2.10.1
+      - run: pip-audit --disable-pip --require-hashes -r deploy/requirements.txt
+
+  image:
+    needs: [tests, lock]
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - name: Smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: dont-dry:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - run: |
+          docker run --rm dont-dry:test --version
+          docker run --rm --read-only --tmpfs /tmp dont-dry:test next
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # latest and X.Y.Z come only from release tags; master is published as "edge"
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=edge,branch=master
+            type=sha,format=short
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          provenance: mode=max
+          sbom: true

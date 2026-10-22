@@ -1,0 +1,25 @@
+name: Idea or feature request
+description: Something dont-dry could do, or do better.
+labels: ["type: feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Please search [existing issues](https://github.com/frkey/dont-dry/issues?q=is%3Aissue)
+        first: this repository is public.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like
+      description: How you picture it working.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you tried or considered
