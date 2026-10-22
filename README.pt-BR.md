@@ -186,9 +186,9 @@ confere todas ao iniciar e para com uma mensagem clara se alguma estiver errada.
 | Variável | Padrão | Descrição |
 |---|---|---|
 | `PRINTER_URI` | *(obrigatória)* | ex.: `ipp://192.168.1.50/ipp/print` |
-| `SCHEDULE` | `0 9 * * 1,4` | Expressão cron: minuto hora dia-do-mês mês dia-da-semana. Nomes (`mon`, `jan`), intervalos, listas, passos e atalhos como `@weekly` funcionam. |
+| `SCHEDULE` | `0 9 * * 1,4` | Expressão cron: minuto hora dia-do-mês mês dia-da-semana. Nomes (`mon`, `jan`), intervalos, listas, passos e atalhos como `@weekly` funcionam. As impressões precisam ficar a pelo menos 3 horas uma da outra. |
 | `TZ` | `UTC` | Fuso horário do agendamento, ex.: `America/Sao_Paulo` |
-| `RUN_ON_START` | `false` | Imprime uma vez assim que o agendador inicia |
+| `RUN_ON_START` | `false` | Imprime uma vez assim que o agendador inicia (não se uma página chegou à impressora na última hora) |
 | `PAGE_SIZE` | `a4` | `a4` ou `letter` |
 | `LOCALE` | `en-US` | Idioma da página, das notificações e da saída dos comandos: `en-US` ou `pt-BR` |
 | `PAGE_TITLE` | `dont-dry maintenance page` | Título impresso na página (o padrão segue o `LOCALE`: `página de manutenção dont-dry` em pt-BR) |
@@ -203,11 +203,13 @@ confere todas ao iniciar e para com uma mensagem clara se alguma estiver errada.
 | `NOTIFY_ON` | `failure` | `failure` (também tinta baixa), `always` ou `never` |
 | `TLS_VERIFY` | `false` | Verifica o certificado da impressora em `ipps://` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` ou `ERROR` |
-| `STATE_DIR` | `~/.local/state/dont-dry` | Onde ficam o heartbeat e o `last-run.json` (`/tmp/dont-dry` na imagem) |
+| `STATE_DIR` | `~/.local/state/dont-dry` | Onde ficam o heartbeat e o `last-run.json` (`/var/lib/dont-dry` na imagem, um volume no `docker-compose.yml`) |
 
 Só há nova tentativa quando o trabalho nem chegou à impressora (ela estava dormindo, desligada,
 ocupada ou sem aceitar trabalhos). Se a impressora aceitou o trabalho e depois o abortou, o
-dont-dry informa a falha em vez de gastar outra folha.
+dont-dry informa a falha em vez de gastar outra folha. Seja qual for o motivo (um reinício, o
+relógio voltando, a hora que se repete no fim do horário de verão), o dont-dry nunca imprime de
+novo menos de uma hora depois de uma página que chegou à impressora.
 
 ### Notificações
 
@@ -241,6 +243,8 @@ Com Docker: `docker compose exec dont-dry dont-dry info`, ou `docker compose run
 | `job N processing (still processing after 300s)` | A impressora estava ocupada, por exemplo limpando as cabeças. Aumente o `JOB_TIMEOUT`. |
 | `printer is not accepting jobs (...)` | A impressora está pausada ou mostra um erro no painel (os motivos entre parênteses dizem qual). Resolva lá; o dont-dry tenta de novo sozinho. |
 | `A versão vX.Y.Z não está assinada com a chave de releases do dont-dry` | O instalador recusou uma versão que não conseguiu conferir, e nada mudou. Por favor, avise: isso não deveria acontecer. |
+| `a page reached the printer N minutes ago; not printing again so soon` | Não há nada errado: uma página saiu há menos de uma hora (por exemplo, logo antes de um reinício), então esta foi pulada. `dont-dry print` imprime mesmo assim. |
+| `SCHEDULE ... less than 3 hours apart` | Confira os campos de minuto e hora: `* 9 * * 1` é a cada minuto das 09:00 às 09:59; `0 9 * * 1` é às 09:00 de segunda. |
 | O contêiner fica `unhealthy` | Leia `docker compose logs dont-dry`: o agendador parou ou não consegue gravar o heartbeat em `STATE_DIR`. |
 | Linhas faltando ou falhadas na página | É para isso que a página serve: rode a limpeza de cabeça pelo menu ou app da impressora e depois `dont-dry print`. Se continuar acontecendo, imprima com mais frequência. |
 

@@ -347,10 +347,12 @@ cat > "$WRAPPER" <<'EOF'
 #!/bin/sh
 # Runs dont-dry with the service's settings (installed by deploy/install.sh), e.g.
 # "dont-dry info" or "dont-dry print". systemd reads /etc/dont-dry.env exactly as it does for the
-# service, and the command runs in the same kind of sandbox, as a throwaway user.
+# service, and the command runs as the service's throwaway user, with its state folder, so a
+# page printed by hand is recorded like a scheduled one.
 exec systemd-run --quiet --wait --pipe --collect \
-  --property=EnvironmentFile=/etc/dont-dry.env --property=DynamicUser=yes \
-  --setenv=PYTHONUNBUFFERED=1 --setenv=STATE_DIR=/tmp/dont-dry \
+  --property=EnvironmentFile=/etc/dont-dry.env \
+  --property=DynamicUser=yes --property=User=dont-dry --property=StateDirectory=dont-dry \
+  --setenv=PYTHONUNBUFFERED=1 --setenv=STATE_DIR=/var/lib/dont-dry \
   /opt/dont-dry/venv/bin/dont-dry "$@"
 EOF
 chmod 755 "$WRAPPER"

@@ -128,6 +128,11 @@ class PrintResult:
     retryable: bool = False
     reason: str = ""  # one of REASONS; `message` holds the technical detail, in English
 
+    @property
+    def reached_printer(self) -> bool:
+        """The printer took a job, so a page may have come out even if it did not finish."""
+        return self.success or self.job_id is not None
+
 
 def inspect(client: IPPClient) -> PrinterInfo:
     return PrinterInfo.from_attributes(client.get_printer_attributes(REQUESTED_ATTRIBUTES))

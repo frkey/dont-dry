@@ -103,7 +103,7 @@ Work is tracked in GitHub issues on `frkey/dont-dry` (use `gh issue ...`).
   behavior (steps to reproduce for bugs), acceptance criteria, and the files involved.
 - **Labels**: one `type:` (`bug`, `feature`, `improvement`, `docs`, `chore`, `security`), one
   `priority:` (`critical`, `high`, `medium`, `low`) and at least one `area:` (`printing`, `ipp`,
-  `page`, `scheduler`, `notify`, `docker`, `deploy`, `i18n`, `docs`). Creating or editing labels changes
+  `page`, `scheduler`, `notify`, `docker`, `deploy`, `i18n`, `ci`, `docs`). Creating or editing labels changes
   the public repository: ask the maintainer before running `gh label create`/`gh label edit`.
 
 ## Pull requests

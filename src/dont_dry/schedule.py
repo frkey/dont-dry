@@ -28,6 +28,13 @@ MACROS = {
 }
 
 
+# Maintenance prints are days apart; anything closer is almost always a slip such as a "*" in
+# the minute field ("* 9 * * 1" prints sixty pages every Monday)
+MIN_GAP = timedelta(hours=3)
+CHECK_PRINTS = 30            # how many upcoming prints check() looks at...
+CHECK_HORIZON = timedelta(days=4 * 366)  # ...within this long (a Feb 29 schedule fires rarely)
+
+
 class CronError(ValueError):
     pass
 
@@ -96,7 +103,41 @@ class Cron:
         return dom_ok or dow_ok
 
     def next_after(self, after: datetime) -> datetime:
-        """First matching minute strictly after `after` (keeps its tzinfo)."""
+        """First matching minute strictly after `after`, in `after`'s time zone.
+
+        For an aware `after`, the result is a later instant, not just a later wall-clock time.
+        When daylight saving time ends, a wall-clock time that happens twice fires only the
+        first time; when it starts, a skipped time fires at the instant it maps to (02:30 that
+        does not exist becomes 03:30).
+        """
+        zone = after.tzinfo
+        if zone is None:
+            return self._next_wall(after)
+        wall = after.replace(tzinfo=None, fold=0)
+        while True:
+            wall = self._next_wall(wall)
+            when = datetime.fromtimestamp(wall.replace(tzinfo=zone).timestamp(), zone)
+            if when.timestamp() > after.timestamp():
+                return when
+
+    def check(self, now: datetime) -> list[datetime]:
+        """The upcoming prints after `now`. Raises CronError when the schedule never fires, or
+        when two prints are less than MIN_GAP apart."""
+        times: list[datetime] = []
+        when = now
+        while len(times) < CHECK_PRINTS and when - now < CHECK_HORIZON:
+            when = self.next_after(when)
+            if times and when.timestamp() - times[-1].timestamp() < MIN_GAP.total_seconds():
+                hours = int(MIN_GAP.total_seconds() // 3600)
+                raise CronError(
+                    f"SCHEDULE {self.expression!r} prints at {times[-1]:%Y-%m-%d %H:%M} and "
+                    f"{when:%H:%M}, less than {hours} hours apart; check the minute and hour "
+                    f"fields (\"0 9 * * 1\" is 09:00 on Mondays)")
+            times.append(when)
+        return times
+
+    def _next_wall(self, after: datetime) -> datetime:
+        """First matching wall-clock minute strictly after `after`, ignoring time zones."""
         dt = after.replace(second=0, microsecond=0) + timedelta(minutes=1)
         limit = dt + timedelta(days=366 * 5)
         while dt < limit:

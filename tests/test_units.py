@@ -83,3 +83,63 @@ def test_cron_next(expr, start, expected):
 def test_cron_invalid(expr):
     with pytest.raises(CronError):
         Cron(expr).next_after(datetime(2026, 1, 1))
+
+
+# -- cron across daylight saving time --------------------------------------------
+
+BERLIN = ZoneInfo("Europe/Berlin")
+NEW_YORK = ZoneInfo("America/New_York")
+
+
+@pytest.mark.parametrize("zone,day,expr", [
+    (BERLIN, datetime(2026, 10, 25), "30 2 * * *"),    # 02:00-03:00 happens twice
+    (BERLIN, datetime(2026, 10, 25), "*/20 * * * *"),
+    (BERLIN, datetime(2026, 3, 29), "30 2 * * *"),     # 02:00-03:00 does not happen
+    (NEW_YORK, datetime(2026, 11, 1), "30 1 * * *"),
+    (NEW_YORK, datetime(2026, 3, 8), "30 2 * * *"),
+])
+def test_cron_never_goes_back_or_repeats_across_dst(zone, day, expr):
+    cron = Cron(expr)
+    start = datetime(day.year, day.month, day.day, tzinfo=zone).timestamp() - 3600
+    seen = []
+    for minute in range(26 * 60):  # every instant, minute by minute, around the change
+        now = datetime.fromtimestamp(start + minute * 60, zone)
+        nxt = cron.next_after(now)
+        assert nxt.timestamp() > now.timestamp(), (now, nxt)
+        if not seen or seen[-1] != nxt.timestamp():
+            seen.append(nxt.timestamp())
+    walls = [datetime.fromtimestamp(t, zone).strftime("%m-%d %H:%M") for t in seen]
+    assert len(walls) == len(set(walls)), walls  # each wall-clock time fires at most once
+
+
+def test_cron_fires_the_first_of_two_identical_times():
+    first = Cron("30 2 * * *").next_after(datetime(2026, 10, 25, 1, 0, tzinfo=BERLIN))
+    assert first.utcoffset().total_seconds() == 7200            # 02:30 CEST, not CET
+    after_it = datetime(2026, 10, 25, 2, 10, fold=1, tzinfo=BERLIN)   # 02:10 CET, later
+    assert Cron("30 2 * * *").next_after(after_it).date() == datetime(2026, 10, 26).date()
+
+
+def test_cron_moves_a_skipped_time_to_the_instant_it_maps_to():
+    when = Cron("30 2 * * *").next_after(datetime(2026, 3, 29, 1, 0, tzinfo=BERLIN))
+    assert (when.hour, when.minute, when.utcoffset().total_seconds()) == (3, 30, 7200)
+
+
+# -- schedules that print too often ----------------------------------------------
+
+
+@pytest.mark.parametrize("expr", ["* 9 * * 1", "*/15 * * * *", "0 * * * *", "0 9,10 * * *"])
+def test_schedules_closer_than_the_minimum_gap_are_refused(expr):
+    with pytest.raises(CronError, match="less than 3 hours apart"):
+        Cron(expr).check(datetime(2026, 10, 21, 8, 0, tzinfo=SP))
+
+
+@pytest.mark.parametrize("expr", ["0 9 * * 1,4", "0 */4 * * *", "0 9,21 * * *",
+                                  "0 9 29 feb *", "@weekly"])
+def test_reasonable_schedules_pass_the_check(expr):
+    times = Cron(expr).check(datetime(2026, 10, 21, 8, 0, tzinfo=SP))
+    assert times and all(b > a for a, b in zip(times, times[1:], strict=False))
+
+
+def test_check_finds_schedules_that_never_fire():
+    with pytest.raises(CronError, match="never fires"):
+        Cron("0 9 30 2 *").check(datetime(2026, 10, 21, 8, 0, tzinfo=SP))

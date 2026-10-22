@@ -5,10 +5,12 @@ services:
     container_name: dont-dry
     restart: unless-stopped
     env_file: .env
-    # dont-dry needs no privileges and writes only its heartbeat to /tmp
+    # dont-dry needs no privileges and writes only to its state volume
     read_only: true
     tmpfs:
       - /tmp
+    volumes:
+      - state:/var/lib/dont-dry
     cap_drop:
       - ALL
     security_opt:
@@ -18,3 +20,6 @@ services:
       options:
         max-size: 1m
         max-file: "3"
+
+volumes:
+  state:

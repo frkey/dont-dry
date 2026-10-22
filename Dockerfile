@@ -6,7 +6,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 dontdry \
-    && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin dontdry
+    && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin dontdry \
+    && install -d -m 700 -o 10001 -g 10001 /var/lib/dont-dry
 
 WORKDIR /app
 ENV PIP_NO_CACHE_DIR=1 \
@@ -22,7 +23,9 @@ COPY src ./src
 RUN pip install --no-deps --no-build-isolation . && dont-dry --version
 
 USER 10001:10001
-ENV STATE_DIR=/tmp/dont-dry \
+# The heartbeat and last-run.json. Mount a volume here (docker-compose.yml does) so the last print
+# survives a restart: dont-dry never prints again within an hour of one that reached the printer.
+ENV STATE_DIR=/var/lib/dont-dry \
     TZ=UTC
 
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \

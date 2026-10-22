@@ -180,9 +180,9 @@ them all when it starts and stops with a clear message if one is wrong.
 | Variable | Default | Description |
 |---|---|---|
 | `PRINTER_URI` | *(required)* | e.g. `ipp://192.168.1.50/ipp/print` |
-| `SCHEDULE` | `0 9 * * 1,4` | Cron expression: minute hour day-of-month month day-of-week. Names (`mon`, `jan`), ranges, lists, steps and `@weekly`-style macros work. |
+| `SCHEDULE` | `0 9 * * 1,4` | Cron expression: minute hour day-of-month month day-of-week. Names (`mon`, `jan`), ranges, lists, steps and `@weekly`-style macros work. Prints must be at least 3 hours apart. |
 | `TZ` | `UTC` | Time zone for the schedule, e.g. `America/Sao_Paulo` |
-| `RUN_ON_START` | `false` | Print once when the scheduler starts |
+| `RUN_ON_START` | `false` | Print once when the scheduler starts (not if a page reached the printer in the last hour) |
 | `PAGE_SIZE` | `a4` | `a4` or `letter` |
 | `LOCALE` | `en-US` | Language of the page, notifications and command output: `en-US` or `pt-BR` |
 | `PAGE_TITLE` | `dont-dry maintenance page` | Heading printed on the page (the default follows `LOCALE`) |
@@ -197,11 +197,13 @@ them all when it starts and stops with a clear message if one is wrong.
 | `NOTIFY_ON` | `failure` | `failure` (also low ink), `always` or `never` |
 | `TLS_VERIFY` | `false` | Verify the printer's certificate for `ipps://` |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR` |
-| `STATE_DIR` | `~/.local/state/dont-dry` | Where the heartbeat and `last-run.json` go (`/tmp/dont-dry` in the image) |
+| `STATE_DIR` | `~/.local/state/dont-dry` | Where the heartbeat and `last-run.json` go (`/var/lib/dont-dry` in the image, a volume in `docker-compose.yml`) |
 
 A retry only happens when the job never reached the printer (it was asleep, offline, busy or not
 accepting jobs). If the printer accepted a job and then aborted it, dont-dry reports the failure
-instead of wasting another page.
+instead of wasting another page. Whatever asks for it (a restart, the clock moving back, the hour
+that repeats when daylight saving time ends), dont-dry never prints again within an hour of a
+page that reached the printer.
 
 ### Notifications
 
@@ -235,6 +237,8 @@ With Docker: `docker compose exec dont-dry dont-dry info`, or `docker compose ru
 | `job N processing (still processing after 300s)` | The printer was busy, for example cleaning its heads. Raise `JOB_TIMEOUT`. |
 | `printer is not accepting jobs (...)` | The printer is paused or shows an error on its panel (the reasons in parentheses say which). Fix it there; dont-dry retries on its own. |
 | `Release vX.Y.Z is not signed with the dont-dry release key` | The installer refused a release it could not verify, and nothing changed. Please report it: it should not happen. |
+| `a page reached the printer N minutes ago; not printing again so soon` | Nothing is wrong: a page went out less than an hour ago (for example just before a restart), so this one is skipped. `dont-dry print` prints anyway. |
+| `SCHEDULE ... less than 3 hours apart` | Check the minute and hour fields: `* 9 * * 1` is every minute from 09:00 to 09:59; `0 9 * * 1` is 09:00 on Mondays. |
 | The container is `unhealthy` | Read `docker compose logs dont-dry`: the scheduler stopped or cannot write its heartbeat to `STATE_DIR`. |
 | Lines missing or streaky on the page | That is what the page is for: run the head cleaning from the printer's menu or app, then `dont-dry print`. If it keeps happening, print more often. |
 

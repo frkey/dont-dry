@@ -83,6 +83,7 @@ jobs:
             --printer ipp://127.0.0.1:8631/ipp/print --timezone America/Sao_Paulo --test-print
           grep "job 1: application/pdf" fake-printer.log
           systemctl is-active dont-dry
+          sudo grep '"sent": true' /var/lib/dont-dry/last-run.json
       - name: Update keeps the settings
         run: |
           sudo cp /etc/dont-dry.env settings-before
