@@ -52,6 +52,8 @@ All notable changes to dont-dry are listed here. The format follows
   and `create-lxc.sh` installs with that release's installer.
 - Release images are published only from a tag signed with a key in `master`'s
   `RELEASE_SIGNERS`, and carry a build provenance attestation.
+- `master` takes only pull requests with passing checks, release tags cannot be moved or
+  deleted, and Dependabot security updates are on.
 
 - An update never moves back to an older release (if newer tags disappear, say); `--ref` still
   installs any version on purpose.

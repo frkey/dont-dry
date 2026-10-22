@@ -71,7 +71,9 @@ docs/           images for the README
 1. **Find or open an issue** first, unless the change is tiny. Search
    [open and closed issues](https://github.com/frkey/dont-dry/issues?q=is%3Aissue) to avoid
    duplicates.
-2. **Branch from `master`** and keep the change focused on that issue.
+2. **Branch from `master`** and keep the change focused on that issue. `master` only takes pull
+   requests whose CI checks pass (no direct pushes, force-pushes or deletion), and release tags
+   (`v*`) cannot be moved or deleted.
 3. **Add or update tests.** Tests are hermetic: no network, no real printer, and the conftest
    clears every dont-dry setting from the environment.
 4. **Changed the page?** Render it in both languages and look at it (`dont-dry render page.png`

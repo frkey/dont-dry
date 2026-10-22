@@ -59,7 +59,10 @@ python -m tests.fake_printer 8631       # a fake printer to point PRINTER_URI at
 
 ## Conventions
 
-- Default branch: `master`. Supported Python: 3.10+ (the image uses 3.13).
+- Default branch: `master`, protected by a ruleset: pull requests only, with the CI checks
+  passing; release tags `v*` cannot be moved or deleted. When you add or rename a CI job that
+  every pull request runs, ask the maintainer to update the required checks. Supported Python:
+  3.10+ (the image uses 3.13).
 - **Never waste ink.** Only failures before a job reaches the printer are retried
   (`PrintResult.retryable`): unreachable, not accepting jobs, or a `RETRYABLE_STATUSES` answer.
   A job the printer accepted is never resent, whatever happened to it.
