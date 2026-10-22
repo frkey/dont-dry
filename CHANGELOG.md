@@ -6,6 +6,8 @@ All notable changes to dont-dry are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-22
+
 ### Fixed
 
 - In a Proxmox container, the `dont-dry` command (and with it the installer's printer check and
@@ -127,6 +129,7 @@ The first public release.
   or Ubuntu 22.04+, only from releases signed with the dont-dry release key; running it again
   updates and keeps the settings.
 
-[Unreleased]: https://github.com/frkey/dont-dry/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/frkey/dont-dry/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/frkey/dont-dry/releases/tag/v0.2.1
 [0.2.0]: https://github.com/frkey/dont-dry/releases/tag/v0.2.0
 [0.1.0]: https://github.com/frkey/dont-dry/releases/tag/v0.1.0
