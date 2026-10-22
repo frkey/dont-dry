@@ -161,9 +161,11 @@ como opção. Como root, `dont-dry info`, `dont-dry print` e `dont-dry next` usa
 do serviço.
 
 Os dois scripts só instalam a última versão quando a tag dela tem a assinatura de releases do
-dont-dry, e instalam os pacotes Python em versões exatas, com o hash conferido. O serviço roda
-com um usuário temporário que só consegue gravar na própria pasta de estado. Esta instalação
-também resolve o nome `.local` da impressora, que continua valendo quando o IP dela muda.
+dont-dry, e instalam os pacotes Python em versões exatas, com o hash conferido; uma atualização
+nunca volta para uma versão mais antiga, a não ser que você a peça com `--ref`. O serviço roda com
+um usuário temporário que só consegue gravar na própria pasta de estado. Um endereço de
+impressora com nome `.local` (que continua valendo quando o IP dela muda) também funciona: nesse
+caso o instalador acrescenta o resolvedor mDNS.
 
 ### Docker, num LXC ou numa VM
 

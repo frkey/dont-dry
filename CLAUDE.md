@@ -53,7 +53,7 @@ dont-dry render page.png                # the test page (.pdf, .png, .jpg or .pw
 SCHEDULE="0 9 * * 1,4" dont-dry next    # upcoming print times
 LOCALE=pt-BR dont-dry render pagina.png # the page in Brazilian Portuguese
 docker build -t dont-dry . && docker run --rm --read-only --tmpfs /tmp dont-dry next
-shellcheck deploy/*.sh deploy/proxmox/*.sh
+shellcheck deploy/*.sh deploy/proxmox/*.sh .github/scripts/*.sh
 python -m tests.fake_printer 8631       # a fake printer to point PRINTER_URI at
 ```
 

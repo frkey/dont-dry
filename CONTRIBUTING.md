@@ -102,11 +102,13 @@ sets the settings given as options. Their messages are in English and Brazilian 
 one of them), and they must pass ShellCheck:
 
 ```sh
-shellcheck deploy/*.sh deploy/proxmox/*.sh
+shellcheck deploy/*.sh deploy/proxmox/*.sh .github/scripts/*.sh
 ```
 
 `tests/test_deploy.py` also runs `create-lxc.sh` against stand-ins for Proxmox's commands, and
-CI's `install` job runs `install.sh` from the pull request on a real Ubuntu with systemd. If you
+CI's `install` job runs `install.sh` from the pull request on a real Ubuntu with systemd, and
+`release-install` (`.github/scripts/test-release-install.sh`) checks the release path: signed and
+unsigned tags, an update through the new installer, a downgrade. If you
 touch the systemd sandbox in `dont-dry.service`, check that it still starts in an unprivileged
 Proxmox container with nesting.
 

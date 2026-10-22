@@ -159,3 +159,46 @@ def test_installer_checks_options_before_touching_the_machine(args, message):
                             stdin=subprocess.DEVNULL, env={**os.environ, "LANG": "C"})
     assert result.returncode == 1
     assert message in result.stderr
+
+
+# -- install.sh's helpers, run on their own ------------------------------------------
+
+
+def _function(name: str) -> str:
+    text = INSTALL.read_text()
+    start = text.index(f"{name}() {{")
+    return text[start:text.index("\n}\n", start) + 3]
+
+
+@pytest.mark.parametrize("before,after", [
+    ("# TZ=America/Sao_Paulo\nTZ=Europe/Berlin\n",                 # a comment above it
+     "# TZ=America/Sao_Paulo\nTZ=America/New_York\n"),
+    ("TZ=UTC\nLOCALE=en-US\nTZ=Europe/Berlin\n",                     # systemd reads the last
+     "TZ=UTC\nLOCALE=en-US\nTZ=America/New_York\n"),
+    ("SCHEDULE=0 9 * * 1\n# TZ=America/Sao_Paulo\n",                 # only an example
+     "SCHEDULE=0 9 * * 1\nTZ=America/New_York\n"),
+    ("SCHEDULE=0 9 * * 1\n",                                         # not there at all
+     "SCHEDULE=0 9 * * 1\nTZ=America/New_York\n"),
+])
+@needs_bash
+def test_set_setting_changes_what_systemd_reads(tmp_path, before, after):
+    conf = tmp_path / "dont-dry.env"
+    conf.write_text(before)
+    subprocess.run(["bash", "-c", _function("set_setting") +
+                    f'CONF="{conf}"; set_setting TZ America/New_York'], check=True)
+    assert conf.read_text() == after
+    assert stat.S_IMODE(conf.stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize("uri,host", [
+    ("ipp://192.168.1.50/ipp/print", "192.168.1.50"),
+    ("ipps://printer.local:631/ipp/print", "printer.local"),
+    ("ipp://EPSON1234.local./ipp", "EPSON1234.local."),
+    ("ipp://[fe80::1]:631/ipp/print", "[fe80::1]"),
+    ("", ""),
+])
+@needs_bash
+def test_printer_host(uri, host):
+    out = subprocess.run(["bash", "-c", _function("printer_host") + f'printer_host "{uri}"'],
+                         check=True, capture_output=True, text=True).stdout.strip()
+    assert out == host
