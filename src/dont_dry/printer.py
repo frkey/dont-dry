@@ -14,8 +14,8 @@ from PIL import Image, ImageOps
 
 from . import page, pwg
 from .config import Config
-from .ipp import (JOB_STATES, PRINTER_STATES, TAG_KEYWORD, Attr, IPPClient, IPPError,
-                  Resolution)
+from .ipp import (JOB_STATES, PRINTER_STATES, TAG_KEYWORD, Attr, IPPAnswerLost, IPPClient,
+                  IPPError, Resolution)
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,8 @@ FINAL_JOB_STATES = ("completed", "canceled", "aborted")
 # notifications show above the technical message
 REASONS = (
     "completed", "accepted", "unreachable", "not_accepting", "no_format", "bad_document",
-    "rejected", "canceled", "aborted", "timeout", "stopped", "unknown", "unexpected",
+    "rejected", "answer_lost", "canceled", "aborted", "timeout", "stopped", "unknown",
+    "unexpected",
 )
 
 Wait = Callable[[float], bool]
@@ -58,6 +59,17 @@ class Marker:
     name: str
     level: int | None  # percent, None when unknown
     color: str
+
+
+def _text(value: Any) -> str:
+    """Text from the printer without control characters (escape sequences, newlines), so it
+    can neither rewrite a terminal nor forge a log line."""
+    return "".join(ch for ch in str(value) if ch.isprintable())
+
+
+def _enum(value: Any) -> int | None:
+    """An enum value as the printer sent it, or None for any other type (a collection, say)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 @dataclass
@@ -84,9 +96,15 @@ class PrinterInfo:
         def many(name: str) -> list[Any]:
             return [v for v in attrs.get(name, []) if v is not None]
 
-        names = many("marker-names")
+        def texts(name: str) -> list[str]:
+            return [_text(v) for v in attrs.get(name, []) if isinstance(v, str)]
+
+        def text(name: str) -> str:
+            return (texts(name) or [""])[0]
+
+        names = texts("marker-names")
         levels = attrs.get("marker-levels", [])
-        colors = many("marker-colors")
+        colors = texts("marker-colors")
         markers = []
         for i, name in enumerate(names):
             level = levels[i] if i < len(levels) else None
@@ -94,18 +112,18 @@ class PrinterInfo:
             markers.append(Marker(name, level if isinstance(level, int) and level >= 0 else None,
                                   colors[i] if i < len(colors) else ""))
         return cls(
-            name=str(first("printer-name")),
-            model=str(first("printer-make-and-model")),
-            state=PRINTER_STATES.get(first("printer-state", 0), "unknown"),
-            state_reasons=[str(r) for r in many("printer-state-reasons")],
-            state_message=str(first("printer-state-message")),
-            accepting_jobs=bool(first("printer-is-accepting-jobs", True)),
-            formats=[str(f) for f in many("document-format-supported")],
+            name=text("printer-name"),
+            model=text("printer-make-and-model"),
+            state=PRINTER_STATES.get(_enum(first("printer-state", None)), "unknown"),
+            state_reasons=texts("printer-state-reasons"),
+            state_message=text("printer-state-message"),
+            accepting_jobs=first("printer-is-accepting-jobs", True) is not False,
+            formats=texts("document-format-supported"),
             pwg_resolutions=[r for r in many("pwg-raster-document-resolution-supported")
                              if isinstance(r, Resolution)],
-            pwg_types=[str(t) for t in many("pwg-raster-document-type-supported")],
-            media=[str(m) for m in many("media-supported")],
-            color_modes=[str(m) for m in many("print-color-mode-supported")],
+            pwg_types=texts("pwg-raster-document-type-supported"),
+            media=texts("media-supported"),
+            color_modes=texts("print-color-mode-supported"),
             markers=markers,
         )
 
@@ -131,7 +149,7 @@ class PrintResult:
     @property
     def reached_printer(self) -> bool:
         """The printer took a job, so a page may have come out even if it did not finish."""
-        return self.success or self.job_id is not None
+        return self.success or self.job_id is not None or self.reason == "answer_lost"
 
 
 def inspect(client: IPPClient) -> PrinterInfo:
@@ -246,8 +264,9 @@ def _wait_for_job(client: IPPClient, job_id: int, timeout: int,
         if not response.ok:
             return "unknown", "unknown", f"Get-Job-Attributes failed: {response.status_name}"
         job = response.group("job")
-        state = JOB_STATES.get((job.get("job-state") or [0])[0], "unknown")
-        reasons = [r for r in job.get("job-state-reasons", []) if r and r != "none"]
+        state = JOB_STATES.get(_enum((job.get("job-state") or [None])[0]), "unknown")
+        reasons = [_text(r) for r in job.get("job-state-reasons", [])
+                   if isinstance(r, str) and r and r != "none"]
         detail = ", ".join(reasons)
         if state in FINAL_JOB_STATES:
             return state, state, detail
@@ -285,11 +304,15 @@ def print_page(cfg: Config, *, wait: Wait = plain_wait) -> PrintResult:
     log.info("sending %s (%d KB)", fmt, len(document) // 1024)
     try:
         response = client.print_job(document, fmt, cfg.page_title, _job_attributes(cfg, info))
+    except IPPAnswerLost as exc:
+        # The whole page went out: the printer may be printing it, so it is never sent again
+        return PrintResult(False, f"{exc}; the page may have printed, so it was not sent again",
+                           document_format=fmt, printer=info, reason="answer_lost")
     except IPPError as exc:
         return PrintResult(False, str(exc), document_format=fmt, printer=info, retryable=True,
                            reason="unreachable")
     if not response.ok:
-        detail = f" ({response.status_message})" if response.status_message else ""
+        detail = f" ({_text(response.status_message)})" if response.status_message else ""
         return PrintResult(False, f"printer rejected the job: {response.status_name}{detail}",
                            document_format=fmt, printer=info,
                            retryable=response.status in RETRYABLE_STATUSES, reason="rejected")
