@@ -245,3 +245,13 @@ def test_a_job_that_never_finishes_times_out(env, monkeypatch):
         result = print_page(env(printer), wait=lambda seconds: True)
     assert not result.success and result.reason == "timeout"
     assert "still processing after 10s" in result.message
+
+
+def test_fake_printer_reports_a_job_before_answering(env):
+    # CI greps the standalone fake printer's log right after a print: the job must be reported
+    # before the printer answers Print-Job, never later
+    seen = []
+    with FakePrinter(on_job=seen.append) as printer:
+        result = print_page(env(printer))
+        assert result.success
+        assert [job["id"] for job in seen] == [1]

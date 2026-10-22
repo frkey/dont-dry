@@ -29,12 +29,13 @@ def encode_response(status: int, request_id: int,
 class FakePrinter:
     def __init__(self, formats=("application/pdf", "image/pwg-raster", "image/jpeg"),
                  pwg_types=("srgb_8", "sgray_8"), accepting=True, final_state=9,
-                 reject_status=None, host="127.0.0.1", port=0):
+                 reject_status=None, host="127.0.0.1", port=0, on_job=None):
         self.formats = list(formats)
         self.pwg_types = list(pwg_types)
         self.accepting = accepting
         self.final_state = final_state
         self.reject_status = reject_status
+        self.on_job = on_job  # called with each job before Print-Job is answered
         self.jobs: list[dict] = []
         self.requests: list[int] = []
         self.printer_uris: list[str] = []
@@ -104,12 +105,15 @@ class FakePrinter:
             if self.reject_status:
                 return encode_response(self.reject_status, rid, [self._operation_group()])
             job_id = len(self.jobs) + 1
-            self.jobs.append({
+            job = {
                 "id": job_id,
                 "format": request.group("operation")["document-format"][0],
                 "job_attrs": request.group("job"),
                 "document": document,
-            })
+            }
+            self.jobs.append(job)
+            if self.on_job:
+                self.on_job(job)
             return encode_response(0, rid, [self._operation_group(), (ipp.TAG_JOB, [
                 Attr("job-id", ipp.TAG_INTEGER, job_id),
                 Attr("job-state", ipp.TAG_ENUM, 3),
@@ -125,15 +129,13 @@ class FakePrinter:
 
 if __name__ == "__main__":
     import sys
-    import time
+    import threading
+
+    def report(job: dict) -> None:
+        print(f"job {job['id']}: {job['format']}, {len(job['document'])} bytes", flush=True)
 
     printer = FakePrinter(port=int(sys.argv[1]) if len(sys.argv) > 1 else 8631,
-                          host=sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1")
+                          host=sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1", on_job=report)
     with printer:
         print(f"fake printer at {printer.uri}", flush=True)
-        seen = 0
-        while True:
-            time.sleep(0.5)
-            for job in printer.jobs[seen:]:
-                print(f"job {job['id']}: {job['format']}, {len(job['document'])} bytes", flush=True)
-            seen = len(printer.jobs)
+        threading.Event().wait()  # until stopped
