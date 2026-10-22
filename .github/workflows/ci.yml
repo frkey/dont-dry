@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: ShellCheck
-        run: shellcheck deploy/*.sh deploy/proxmox/*.sh
+        run: shellcheck deploy/*.sh deploy/proxmox/*.sh .github/scripts/*.sh
 
   # deploy/install.sh from this commit on a real Ubuntu with systemd, against the fake printer:
   # a first install with a test page, then an update that must keep the settings
@@ -93,8 +93,23 @@ jobs:
           systemctl is-active dont-dry
           sudo dont-dry info
 
+  # The release path of deploy/install.sh: signed and unsigned tags, an update through the new
+  # release's installer, a downgrade (throwaway key; see the script)
+  release-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Start a fake printer
+        run: |
+          pip install -e .
+          python -m tests.fake_printer 8631 > fake-printer.log 2>&1 &
+      - run: sudo bash .github/scripts/test-release-install.sh ipp://127.0.0.1:8631/ipp/print
+
   image:
-    needs: [tests, lock, scripts, install]
+    needs: [tests, lock, scripts, install, release-install]
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:

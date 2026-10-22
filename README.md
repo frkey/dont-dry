@@ -155,9 +155,10 @@ the settings you pass as options. As root, `dont-dry info`, `dont-dry print` and
 run with the service's settings.
 
 Both scripts install the latest release only when its tag carries the dont-dry release signature,
-and the Python packages at exact versions checked against their hashes. The service runs as a
-throwaway user that can write nothing but its state folder. This install also resolves the
-printer's `.local` name, which keeps working when its IP address changes.
+and the Python packages at exact versions checked against their hashes; an update never moves
+back to an older release unless you name it with `--ref`. The service runs as a throwaway user
+that can write nothing but its state folder. A printer address with a `.local` name (which keeps
+working when its IP address changes) works too: the installer then adds the mDNS resolver.
 
 ### Docker, in an LXC or a VM
 

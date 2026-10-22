@@ -26,7 +26,7 @@ SELF_HASH=""
 
 REPO="${DONT_DRY_REPO:-}"
 REF="${DONT_DRY_REF:-}"
-LOCALE="${DONT_DRY_LOCALE:-}"
+GIVEN_LOCALE=""                  # --locale: also written to the settings
 PRINTER="${DONT_DRY_PRINTER:-}"  # set when an earlier run of this script asked for it
 SCHEDULE=""
 TIMEZONE=""
@@ -48,7 +48,7 @@ while [ $# -gt 0 ]; do
     --printer) PRINTER="${2:-}"; shift 2 || shift ;;
     --schedule) SCHEDULE="${2:-}"; shift 2 || shift ;;
     --timezone) TIMEZONE="${2:-}"; shift 2 || shift ;;
-    --locale) LOCALE="${2:-}"; shift 2 || shift ;;
+    --locale) GIVEN_LOCALE="${2:-}"; shift 2 || shift ;;
     --test-print) TEST_PRINT=1; shift ;;
     --ref) REF="${2:-}"; shift 2 || shift ;;
     -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -64,16 +64,20 @@ normalize_locale() {
   esac
 }
 
-GIVEN_LOCALE="$LOCALE"
-if [ -n "$LOCALE" ]; then
-  LOCALE="$(normalize_locale "$LOCALE")"
-elif [ -f "$CONF" ] && [ ! -L "$CONF" ]; then
-  # Without --locale, an update speaks the language of the existing settings
-  LOCALE="$(normalize_locale "$(sed -n 's/^LOCALE=\([A-Za-z_-]*\).*/\1/p' "$CONF" | head -n 1)")"
-fi
-# Otherwise, follow the system locale
-if [ -z "$GIVEN_LOCALE" ] && [ -z "$LOCALE" ]; then
-  case "${LC_ALL:-${LANG:-}}" in pt*) LOCALE="pt-BR" ;; esac
+# The messages' language: --locale; else what a run of this script that re-ran it chose
+# (DONT_DRY_LOCALE, which only picks the messages' language and is never written to the
+# settings); else, for an update, the settings' own (the last LOCALE= line, as systemd reads it);
+# else the system locale.
+if [ -n "$GIVEN_LOCALE" ]; then
+  LOCALE="$(normalize_locale "$GIVEN_LOCALE")"
+else
+  LOCALE="$(normalize_locale "${DONT_DRY_LOCALE:-}")"
+  if [ -z "$LOCALE" ] && [ -f "$CONF" ] && [ ! -L "$CONF" ]; then
+    LOCALE="$(normalize_locale "$(sed -n 's/^LOCALE=\([A-Za-z_-]*\).*/\1/p' "$CONF" | tail -n 1)")"
+  fi
+  if [ -z "$LOCALE" ]; then
+    case "${LC_ALL:-${LANG:-}}" in pt*) LOCALE="pt-BR" ;; esac
+  fi
 fi
 
 # The messages' language is settled: from here on, every command runs in a locale that always
@@ -99,6 +103,7 @@ case "$LOCALE" in
     MSG_NO_TAGS="Não consegui ler as versões de %s. Confira a rede ou use --ref."
     MSG_NO_RELEASE="Nenhuma versão encontrada em %s, mas esta instalação já está numa versão; nada foi alterado. Para mudar para um branch, use --ref."
     MSG_UNSIGNED="A versão %s não está assinada com a chave de releases do dont-dry; nada foi instalado. Para instalar um branch ou uma tag sem essa conferência, use --ref."
+    MSG_DOWNGRADE="A versão mais nova em %s é %s, mais antiga que a instalada (%s); nada foi alterado. Para instalá-la mesmo assim, use --ref %s."
     MSG_NOT_GIT="%s existe mas não é um clone do git; mova a pasta e rode de novo."
     MSG_PIP="Instalando o pacote Python..."
     MSG_CONFIG_NEW="Criei %s."
@@ -137,6 +142,7 @@ O dont-dry está rodando."
     MSG_NO_TAGS="Could not list the versions of %s. Check the network or use --ref."
     MSG_NO_RELEASE="No release found in %s, but this install is already on one; nothing was changed. To switch to a branch, use --ref."
     MSG_UNSIGNED="Release %s is not signed with the dont-dry release key; nothing was installed. To install a branch or tag without this check, use --ref."
+    MSG_DOWNGRADE="The newest release in %s is %s, older than the installed %s; nothing was changed. To install it anyway, use --ref %s."
     MSG_NOT_GIT="%s exists but is not a git checkout; move it away and run again."
     MSG_PIP="Installing the Python package..."
     MSG_CONFIG_NEW="Created %s."
@@ -208,10 +214,22 @@ fi
 say "$MSG_PACKAGES"
 export DEBIAN_FRONTEND=noninteractive DEBCONF_NOWARNINGS=yes
 apt-get update -qq
-# DejaVu draws the page's text. avahi and nss-mdns let PRINTER_URI use the printer's .local name,
-# which keeps working when its IP address changes. git checks release signatures with ssh-keygen.
+# printer_host URI: the host part, e.g. 192.168.1.50, printer.local or [fe80::1]
+printer_host() {
+  printf '%s\n' "$1" | sed -E -n 's#^[A-Za-z]+://([^/@]*@)?(\[[^]]*\]|[^/:]+).*#\2#p'
+}
+# The printer the service will use: --printer, else the one in the settings (the last line)
+SERVICE_PRINTER="$PRINTER"
+if [ -z "$SERVICE_PRINTER" ] && [ -f "$CONF" ] && [ ! -L "$CONF" ]; then
+  SERVICE_PRINTER="$(sed -n 's/^PRINTER_URI=//p' "$CONF" | tail -n 1)"
+fi
+# avahi and nss-mdns resolve a printer's .local name (which keeps working when its IP address
+# changes), but avahi also announces this machine on the network: only when the printer needs it
+MDNS_PACKAGES=()
+case "$(printer_host "$SERVICE_PRINTER")" in *.local|*.local.) MDNS_PACKAGES=(avahi-daemon libnss-mdns) ;; esac
+# DejaVu draws the page's text. git checks release signatures with ssh-keygen.
 apt-get install -y -qq --no-install-recommends python3 python3-venv git ca-certificates tzdata \
-  fonts-dejavu-core avahi-daemon libnss-mdns openssh-client >/dev/null
+  fonts-dejavu-core openssh-client "${MDNS_PACKAGES[@]}" >/dev/null
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' || die "$MSG_OLD_PYTHON"
 [ -z "$TIMEZONE" ] || valid_timezone "$TIMEZONE" || die "$MSG_BAD_TIMEZONE" "$TIMEZONE"
 
@@ -231,12 +249,18 @@ if [ "$REF" = "latest" ]; then
   TARGET="$(printf '%s\n' "$TAGS" |
     sed -n 's|^[0-9a-f]*[[:space:]]*refs/tags/\(v[0-9]*\.[0-9]*\.[0-9]*\)$|\1|p' |
     sort -V | tail -n 1)"
+  CURRENT="$(git -C "$APP_DIR" describe --tags --exact-match HEAD 2>/dev/null || true)"
+  case "$CURRENT" in v[0-9]*.[0-9]*.[0-9]*) ;; *) CURRENT="" ;; esac
   if [ -z "$TARGET" ]; then
     # No release yet: master. An install already on a release never falls back to master,
     # which is not signed: its releases disappearing is a reason to stop, not to follow.
-    CURRENT="$(git -C "$APP_DIR" describe --tags --exact-match HEAD 2>/dev/null || true)"
-    case "$CURRENT" in v[0-9]*.[0-9]*.[0-9]*) die "$MSG_NO_RELEASE" "$REPO" ;; esac
+    [ -z "$CURRENT" ] || die "$MSG_NO_RELEASE" "$REPO"
     TARGET="master"
+  elif [ -n "$CURRENT" ] && [ "$TARGET" != "$CURRENT" ] &&
+       [ "$(printf '%s\n%s\n' "$TARGET" "$CURRENT" | sort -V | tail -n 1)" = "$CURRENT" ]; then
+    # Newer releases disappeared: going back to an older one, signed but maybe vulnerable, is
+    # something to ask for with --ref, never a side effect of an update
+    die "$MSG_DOWNGRADE" "$REPO" "$TARGET" "$CURRENT" "$TARGET"
   fi
 fi
 
@@ -304,15 +328,22 @@ say "$MSG_PIP"
 "$APP_DIR/venv/bin/pip" install --quiet --disable-pip-version-check --no-deps \
   --no-build-isolation --upgrade "$APP_DIR"
 
-# set_setting NAME VALUE: replaces the first NAME= line (or a commented-out "# NAME=" one) in the
-# settings, or adds one. The file is replaced, never written through, and stays root-only.
+# set_setting NAME VALUE: sets NAME the way systemd will read it. It replaces the last NAME= line
+# (systemd uses the last one); with none, the first commented-out "# NAME=" example; else it adds
+# a line. Comments are left alone. The file is replaced, never written through, and stays
+# root-only.
 set_setting() {
   local tmp
   tmp="$(mktemp "$CONF.XXXXXX")"
   awk -v name="$1" -v value="$2" '
-    !done && ($0 ~ "^" name "=" || $0 ~ "^# *" name "=") { print name "=" value; done = 1; next }
+    NR == FNR {  # first pass: find the line to replace
+      if ($0 ~ "^" name "=") last = FNR
+      else if (!example && $0 ~ "^# *" name "=") example = FNR
+      next
+    }
+    FNR == (last ? last : example) { print name "=" value; done = 1; next }
     { print }
-    END { if (!done) print name "=" value }' "$CONF" > "$tmp"
+    END { if (!done) print name "=" value }' "$CONF" "$CONF" > "$tmp"
   chmod 600 "$tmp"
   mv -f "$tmp" "$CONF"
 }
@@ -343,7 +374,9 @@ else
 fi
 
 say "$MSG_SERVICE"
-cat > "$WRAPPER" <<'EOF'
+# Written next to it and moved into place: a link planted at $WRAPPER is replaced, never followed
+WRAPPER_TMP="$(mktemp "$WRAPPER.XXXXXX")"
+cat > "$WRAPPER_TMP" <<'EOF'
 #!/bin/sh
 # Runs dont-dry with the service's settings (installed by deploy/install.sh), e.g.
 # "dont-dry info" or "dont-dry print". systemd reads /etc/dont-dry.env exactly as it does for the
@@ -355,11 +388,12 @@ exec systemd-run --quiet --wait --pipe --collect \
   --setenv=PYTHONUNBUFFERED=1 --setenv=STATE_DIR=/var/lib/dont-dry \
   /opt/dont-dry/venv/bin/dont-dry "$@"
 EOF
-chmod 755 "$WRAPPER"
+chmod 755 "$WRAPPER_TMP"
+mv -f "$WRAPPER_TMP" "$WRAPPER"
 install -m 644 "$APP_DIR/deploy/dont-dry.service" "$UNIT"
 systemctl daemon-reload
 systemctl enable --quiet dont-dry
-systemctl enable --now --quiet avahi-daemon >/dev/null 2>&1 || true
+[ "${#MDNS_PACKAGES[@]}" -eq 0 ] || systemctl enable --now --quiet avahi-daemon >/dev/null 2>&1 || true
 systemctl restart dont-dry
 sleep 3
 if ! systemctl is-active --quiet dont-dry; then

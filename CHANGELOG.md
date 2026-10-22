@@ -31,6 +31,9 @@ All notable changes to dont-dry are listed here. The format follows
   a photo prints upright.
 - `CUSTOM_PAGE` is checked at start-up (missing, unreadable, not a PDF or an image), and a
   malformed URL in a setting is a clean configuration error instead of a traceback.
+- An update with `install.sh` no longer writes `LOCALE` when it was not given, and an option
+  such as `--timezone` now changes the setting systemd reads (the last line), not a comment
+  above it.
 - A low ink level notifies when it first reaches `LOW_INK_THRESHOLD` or drops further, not at
   every print until the ink is refilled.
 - PWG Raster is encoded row by row: at 600 dpi it needs about a third of the memory it did. A
@@ -43,6 +46,11 @@ All notable changes to dont-dry are listed here. The format follows
   survives restarts.
 
 ### Security
+
+- An update never moves back to an older release (if newer tags disappear, say); `--ref` still
+  installs any version on purpose.
+- `install.sh` installs avahi, which announces the machine on the network, only when the printer
+  address uses a `.local` name.
 
 - Notifications no longer follow redirects, which forwarded `NOTIFY_TOKEN` to whatever address
   the redirect named.
