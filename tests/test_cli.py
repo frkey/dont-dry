@@ -356,3 +356,17 @@ def test_last_sent_survives_a_failed_attempt(cfg):
     cli._report(cfg, PrintResult(False, "asleep"))
     last = state.read(cfg.state_dir, state.LAST_RUN)
     assert last["sent"] is False and last["last_sent"] == sent
+
+
+def test_a_print_cut_short_by_a_restart_is_not_caught_up(cfg, monkeypatch):
+    # the old process died after sending, before writing last-run.json
+    _last_run(cfg, last_sent="2020-01-01T09:00:00+00:00")
+    state.write(cfg.state_dir, state.SENDING, {"time": datetime.now(cfg.timezone).isoformat()})
+    assert _run_once(cfg, monkeypatch) == 0
+    assert cli._sent_recently(cfg) is not None  # and it counts as a page that may be out
+
+
+def test_the_sending_mark_is_cleared_after_the_report(cfg, monkeypatch):
+    _fake_prints(monkeypatch, PrintResult(False, "asleep"))
+    cli.Scheduler(cfg).print_now()
+    assert state.read(cfg.state_dir, state.SENDING) is None
