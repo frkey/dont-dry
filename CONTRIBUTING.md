@@ -117,7 +117,8 @@ Proxmox container with nesting.
 The Dockerfile and `install.sh` use `deploy/requirements.txt`: exact versions with hashes,
 setuptools included, so a build never fetches an unpinned package. After changing the
 dependencies in `pyproject.toml` (or `deploy/requirements.in`), run the command at the top of
-that file again (it needs [uv](https://docs.astral.sh/uv/)); `tests/test_lock.py` fails until the
+that file again, and then the one at the top of `.github/requirements-ci.txt` (CI's own tools,
+in the same versions) (it needs [uv](https://docs.astral.sh/uv/)); `tests/test_lock.py` fails until the
 lock names every dependency. Dependabot proposes version bumps weekly, and CI's `lock` job
 installs the pinned versions, runs the tests with them and checks them against known
 vulnerabilities.
@@ -149,10 +150,12 @@ Versions follow [Semantic Versioning](https://semver.org/). The version lives on
 1. In a pull request, set `__version__` and move `[Unreleased]` in `CHANGELOG.md` to a dated
    section (`## [X.Y.Z] - YYYY-MM-DD`), with its compare link at the bottom.
 2. After it is merged, make a **signed** tag on `master` with the release key and push it:
-   `git tag -s vX.Y.Z -m "dont-dry X.Y.Z"` then `git push origin vX.Y.Z`. CI publishes
-   `ghcr.io/frkey/dont-dry:X.Y.Z`, `:X.Y` and `:latest`. Publish a GitHub release with the
-   changelog section as its notes. From then on, new installs and every update without `--ref`
-   get that version.
+   `git tag -s vX.Y.Z -m "dont-dry X.Y.Z"` then `git push origin vX.Y.Z`. CI checks the tag
+   against the keys in `master`'s `RELEASE_SIGNERS`, publishes `ghcr.io/frkey/dont-dry:X.Y.Z`,
+   `:X.Y` and `:latest` with a provenance attestation, and creates the GitHub release with the
+   changelog section as its notes and `install.sh`, `create-lxc.sh` and `SHA256SUMS` attached
+   (the documented install commands download those). From then on, new installs and every update
+   without `--ref` get that version.
 
 Pushes to `master` publish the `:edge` image only; `:latest` always means the latest release.
 

@@ -47,6 +47,12 @@ All notable changes to dont-dry are listed here. The format follows
 
 ### Security
 
+- The documented install commands download `install.sh` and `create-lxc.sh` attached to the
+  latest release (taken from its signed tag, with `SHA256SUMS`) instead of the code on `master`,
+  and `create-lxc.sh` installs with that release's installer.
+- Release images are published only from a tag signed with a key in `master`'s
+  `RELEASE_SIGNERS`, and carry a build provenance attestation.
+
 - An update never moves back to an older release (if newer tags disappear, say); `--ref` still
   installs any version on purpose.
 - `install.sh` installs avahi, which announces the machine on the network, only when the printer
