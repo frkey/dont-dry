@@ -6,6 +6,8 @@ All notable changes to dont-dry are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-22
+
 The first public release.
 
 ### Printing
@@ -52,4 +54,5 @@ The first public release.
   or Ubuntu 22.04+, only from releases signed with the dont-dry release key; running it again
   updates and keeps the settings.
 
-[Unreleased]: https://github.com/frkey/dont-dry/commits/master
+[Unreleased]: https://github.com/frkey/dont-dry/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/frkey/dont-dry/releases/tag/v0.1.0
