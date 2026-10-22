@@ -118,6 +118,7 @@ case "$LOCALE" in
     MSG_UNREACHABLE="O dont-dry não conseguiu falar com a impressora agora; ele tenta de novo a cada impressão. Para conferir depois: dont-dry info"
     MSG_TEST_PRINT="Imprimindo uma página de teste..."
     MSG_TEST_FAILED="A página de teste não saiu; veja a mensagem acima."
+    MSG_WRAPPER_FAILED="O comando dont-dry não conseguiu iniciar (o systemd parou com o código %s). Veja: journalctl -n 20 -u 'run-*'"
     MSG_RUNNING="
 O dont-dry está rodando."
     MSG_DAY_TO_DAY="  Configurações:   %s (depois, systemctl restart dont-dry)
@@ -157,6 +158,7 @@ O dont-dry está rodando."
     MSG_UNREACHABLE="dont-dry cannot reach the printer right now; it tries again at every print. To check later: dont-dry info"
     MSG_TEST_PRINT="Printing a test page..."
     MSG_TEST_FAILED="The test page did not print; see the message above."
+    MSG_WRAPPER_FAILED="The dont-dry command could not start (systemd stopped it with code %s). See: journalctl -n 20 -u 'run-*'"
     MSG_RUNNING="
 dont-dry is running."
     MSG_DAY_TO_DAY="  Settings:        %s (then systemctl restart dont-dry)
@@ -381,12 +383,14 @@ cat > "$WRAPPER_TMP" <<'EOF'
 # Runs dont-dry with the service's settings (installed by deploy/install.sh), e.g.
 # "dont-dry info" or "dont-dry print". systemd reads /etc/dont-dry.env exactly as it does for the
 # service, and the command runs as the service's throwaway user, with its state folder, so a
-# page printed by hand is recorded like a scheduled one.
+# page printed by hand is recorded like a scheduled one. stdin is never passed on: in an
+# unprivileged container a terminal there belongs to the host, systemd cannot hand it to the
+# throwaway user, and the command would die at step STDIN; dont-dry never reads it anyway.
 exec systemd-run --quiet --wait --pipe --collect \
   --property=EnvironmentFile=/etc/dont-dry.env \
   --property=DynamicUser=yes --property=User=dont-dry --property=StateDirectory=dont-dry \
   --setenv=PYTHONUNBUFFERED=1 --setenv=STATE_DIR=/var/lib/dont-dry \
-  /opt/dont-dry/venv/bin/dont-dry "$@"
+  /opt/dont-dry/venv/bin/dont-dry "$@" </dev/null
 EOF
 chmod 755 "$WRAPPER_TMP"
 mv -f "$WRAPPER_TMP" "$WRAPPER"
@@ -403,13 +407,25 @@ if ! systemctl is-active --quiet dont-dry; then
 fi
 
 say "$MSG_CHECK"
-"$WRAPPER" info || say "$MSG_UNREACHABLE"
+# wrapper_failed STATUS: the transient unit never got to run dont-dry (systemd's own exit codes
+# start at 200), which no message of dont-dry's would explain
+wrapper_failed() {
+  [ "$1" -lt 200 ] && return 1
+  say "$MSG_WRAPPER_FAILED" "$1" >&2
+}
+status=0
+"$WRAPPER" info || status=$?
+[ "$status" -eq 0 ] || wrapper_failed "$status" || say "$MSG_UNREACHABLE"
 if [ "$TEST_PRINT" -eq 1 ]; then
   say "$MSG_TEST_PRINT"
-  "$WRAPPER" print || say "$MSG_TEST_FAILED"
+  status=0
+  "$WRAPPER" print || status=$?
+  [ "$status" -eq 0 ] || wrapper_failed "$status" || say "$MSG_TEST_FAILED"
 fi
 
 say "$MSG_RUNNING"
-"$WRAPPER" next -n 3 || true
+status=0
+"$WRAPPER" next -n 3 || status=$?
+[ "$status" -eq 0 ] || wrapper_failed "$status" || true
 say "$MSG_DAY_TO_DAY" "$CONF"
 [ "$UTC" -eq 0 ] || say "$MSG_UTC"

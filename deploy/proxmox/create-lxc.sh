@@ -96,7 +96,7 @@ O container %s foi criado, mas a instalação não terminou.
     MSG_DONE="
 Pronto! Container %s (%s).
   Configurações:   pct exec %s -- nano /etc/dont-dry.env  (depois: pct exec %s -- systemctl restart dont-dry)
-  Impressora:      pct exec %s -- dont-dry info
+  Impressora:      pct exec %s -- /usr/local/bin/dont-dry info
   Atualizar:       pct exec %s -- env LC_ALL=C.UTF-8 bash /opt/dont-dry/deploy/install.sh"
     ;;
   *)
@@ -123,7 +123,7 @@ Container %s was created, but the installation did not finish.
     MSG_DONE="
 Done! Container %s (%s).
   Settings:   pct exec %s -- nano /etc/dont-dry.env  (then: pct exec %s -- systemctl restart dont-dry)
-  Printer:    pct exec %s -- dont-dry info
+  Printer:    pct exec %s -- /usr/local/bin/dont-dry info
   Update:     pct exec %s -- env LC_ALL=C.UTF-8 bash /opt/dont-dry/deploy/install.sh"
     ;;
 esac

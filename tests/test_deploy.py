@@ -202,3 +202,21 @@ def test_printer_host(uri, host):
     out = subprocess.run(["bash", "-c", _function("printer_host") + f'printer_host "{uri}"'],
                          check=True, capture_output=True, text=True).stdout.strip()
     assert out == host
+
+
+def test_the_wrapper_never_hands_a_terminal_to_systemd():
+    # In an unprivileged LXC container, a terminal on stdin (the Proxmox web Shell, `pct exec`
+    # from a terminal) belongs to the host: systemd cannot give it to the throwaway user and the
+    # command dies at step STDIN (exit 208) without a word. dont-dry never reads stdin.
+    text = INSTALL.read_text()
+    wrapper = text[text.index("<<'EOF'", text.index("WRAPPER_TMP=")):]
+    wrapper = wrapper[:wrapper.index("\nEOF\n")]
+    assert "/opt/dont-dry/venv/bin/dont-dry \"$@\" </dev/null" in wrapper
+
+
+def test_documented_pct_exec_commands_use_the_full_path():
+    # `pct exec` runs with PATH=/sbin:/bin:/usr/sbin:/usr/bin, without /usr/local/bin
+    for path in (CREATE_LXC, ROOT / "README.md", ROOT / "README.pt-BR.md"):
+        text = path.read_text()
+        assert "-- dont-dry " not in text, path.name
+        assert "-- /usr/local/bin/dont-dry info" in text, path.name
