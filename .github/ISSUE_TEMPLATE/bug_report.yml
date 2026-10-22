@@ -31,7 +31,7 @@ body:
       label: How do you run dont-dry?
       options:
         - Docker / Docker Compose
-        - systemd (no Docker)
+        - The Proxmox script or deploy/install.sh (systemd)
         - By hand (pip install)
     validations:
       required: true

@@ -55,8 +55,45 @@ jobs:
       - run: pip install pip-audit==2.10.1
       - run: pip-audit --disable-pip --require-hashes -r deploy/requirements.txt
 
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: ShellCheck
+        run: shellcheck deploy/*.sh deploy/proxmox/*.sh
+
+  # deploy/install.sh from this commit on a real Ubuntu with systemd, against the fake printer:
+  # a first install with a test page, then an update that must keep the settings
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Start a fake printer
+        run: |
+          pip install -e .
+          python -m tests.fake_printer 8631 > fake-printer.log 2>&1 &
+      - name: First install, with a test page
+        run: |
+          git switch --create ci-install
+          sudo git config --global --add safe.directory '*'
+          sudo env DONT_DRY_REPO="$PWD" bash deploy/install.sh --ref ci-install \
+            --printer ipp://127.0.0.1:8631/ipp/print --timezone America/Sao_Paulo --test-print
+          grep "job 1: application/pdf" fake-printer.log
+          systemctl is-active dont-dry
+      - name: Update keeps the settings
+        run: |
+          sudo cp /etc/dont-dry.env settings-before
+          sudo bash /opt/dont-dry/deploy/install.sh
+          sudo cmp settings-before /etc/dont-dry.env
+          test "$(sudo stat -c %a /etc/dont-dry.env)" = 600
+          systemctl is-active dont-dry
+          sudo dont-dry info
+
   image:
-    needs: [tests, lock]
+    needs: [tests, lock, scripts, install]
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:

@@ -26,7 +26,12 @@ dont-dry is meant to run on a home or office **local network**, next to the prin
   capabilities, works with a read-only file system, and installs Python packages at exact
   versions checked against their hashes, on a base image pinned by digest.
 - **The systemd unit is sandboxed.** A throwaway user that can only write `/var/lib/dont-dry`,
-  with no capabilities and a system call filter.
+  with no capabilities and a system call filter. Its settings file, `/etc/dont-dry.env`, is
+  readable by root only.
+- **Installs are verified.** `deploy/install.sh` (also run by the Proxmox script) installs a
+  release only when its tag is signed with the dont-dry release key and names itself with that
+  same version, and the Python packages at exact versions checked against their hashes. A branch
+  or tag you name with `--ref` is installed as it is.
 - **The supply chain is pinned.** CI runs with a read-only token, pins its actions by commit,
   audits the locked packages for known vulnerabilities every week, and publishes images with
   provenance and an SBOM. Dependabot proposes updates.

@@ -39,8 +39,10 @@ don't dry out. It talks IPP straight to the printer: no drivers, no CUPS, no ven
 - `ipp.py` (IPP/1.1 client), `pwg.py` (PWG Raster), `page.py` (the test page), `schedule.py`
   (cron), `config.py` (environment variables), `notify.py` (ntfy/webhooks), `state.py`
   (heartbeat and last-run files), `i18n.py` and `locales/` (translations).
-- `deploy/`: the systemd unit and `requirements.txt`, the hashed lock that the Dockerfile and the
-  systemd install use.
+- `deploy/`: `install.sh` installs or updates dont-dry as a systemd service on Debian/Ubuntu;
+  `proxmox/create-lxc.sh` runs on a Proxmox VE host, creates an LXC container and runs
+  `install.sh` in it; `dont-dry.service` is the unit; `requirements.txt` is the hashed lock that
+  the Dockerfile and `install.sh` use.
 
 ## Commands
 
@@ -51,6 +53,8 @@ dont-dry render page.png                # the test page (.pdf, .png, .jpg or .pw
 SCHEDULE="0 9 * * 1,4" dont-dry next    # upcoming print times
 LOCALE=pt-BR dont-dry render pagina.png # the page in Brazilian Portuguese
 docker build -t dont-dry . && docker run --rm --read-only --tmpfs /tmp dont-dry next
+shellcheck deploy/*.sh deploy/proxmox/*.sh
+python -m tests.fake_printer 8631       # a fake printer to point PRINTER_URI at
 ```
 
 ## Conventions
@@ -73,10 +77,19 @@ docker build -t dont-dry . && docker run --rm --read-only --tmpfs /tmp dont-dry 
   `--read-only --tmpfs /tmp`; the base image is pinned by digest and the CI actions by commit.
 - **The systemd unit** stays sandboxed; if you add an option, check that it still starts in an
   unprivileged LXC container with nesting.
+- **Deploy scripts** are bash (Debian/Ubuntu and Proxmox hosts), pass ShellCheck and must be
+  idempotent: running `install.sh` again is how users update. It never rewrites
+  `/etc/dont-dry.env` (root 600); it only sets the settings passed as options, after checking
+  them. Their messages are `MSG_*` variables in both branches of the `case "$LOCALE"` block (pt-BR
+  with accents: they run in a terminal); `tests/test_deploy.py` checks both branches match.
+  `install.sh` installs a release by "latest" only when its tag is signed by a key in
+  `RELEASE_SIGNERS`; never weaken that check. Never ask for, copy or handle the private release
+  key: it stays in the maintainer's password manager.
 - The version lives only in `src/dont_dry/__init__.py` (`pyproject.toml` reads it).
 - Tests are hermetic: `tests/conftest.py` clears every setting, and printing tests use the fake
   printer in `tests/fake_printer.py`. When you add a setting, add it to `SETTINGS` there, to
-  `.env.example` and to the configuration table in both READMEs.
+  `.env.example` and to the configuration table in both READMEs; if the installers should take
+  it as an option, to both of them as well.
 
 ## Issues and labels
 
@@ -90,7 +103,7 @@ Work is tracked in GitHub issues on `frkey/dont-dry` (use `gh issue ...`).
   behavior (steps to reproduce for bugs), acceptance criteria, and the files involved.
 - **Labels**: one `type:` (`bug`, `feature`, `improvement`, `docs`, `chore`, `security`), one
   `priority:` (`critical`, `high`, `medium`, `low`) and at least one `area:` (`printing`, `ipp`,
-  `page`, `scheduler`, `notify`, `docker`, `deploy`, `docs`). Creating or editing labels changes
+  `page`, `scheduler`, `notify`, `docker`, `deploy`, `i18n`, `docs`). Creating or editing labels changes
   the public repository: ask the maintainer before running `gh label create`/`gh label edit`.
 
 ## Pull requests

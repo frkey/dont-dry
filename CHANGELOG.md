@@ -46,6 +46,10 @@ The first public release.
 
 - A multi-arch Docker image (amd64, arm64) that runs as an unprivileged user, works with a
   read-only file system, and installs exact versions checked against their hashes.
-- A sandboxed systemd unit for a plain Debian LXC container or any Linux machine.
+- `deploy/proxmox/create-lxc.sh`: a ready, unprivileged Debian container on Proxmox VE in two
+  commands, with dont-dry running and the printer checked.
+- `deploy/install.sh`: installs or updates dont-dry as a sandboxed systemd service on Debian 12+
+  or Ubuntu 22.04+, only from releases signed with the dont-dry release key; running it again
+  updates and keeps the settings.
 
 [Unreleased]: https://github.com/frkey/dont-dry/commits/master

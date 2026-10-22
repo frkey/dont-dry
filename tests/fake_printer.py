@@ -1,4 +1,9 @@
-"""A tiny in-process IPP printer for tests."""
+"""A tiny in-process IPP printer for tests.
+
+Run on its own for manual tests and CI, it listens until stopped and prints each job:
+
+    python -m tests.fake_printer [PORT] [HOST]    # default 8631 on 127.0.0.1
+"""
 
 from __future__ import annotations
 
@@ -24,7 +29,7 @@ def encode_response(status: int, request_id: int,
 class FakePrinter:
     def __init__(self, formats=("application/pdf", "image/pwg-raster", "image/jpeg"),
                  pwg_types=("srgb_8", "sgray_8"), accepting=True, final_state=9,
-                 reject_status=None):
+                 reject_status=None, host="127.0.0.1", port=0):
         self.formats = list(formats)
         self.pwg_types = list(pwg_types)
         self.accepting = accepting
@@ -50,12 +55,13 @@ class FakePrinter:
                 self.end_headers()
                 self.wfile.write(payload)
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = ThreadingHTTPServer((host, port), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
     @property
     def uri(self) -> str:
-        return f"ipp://127.0.0.1:{self.server.server_address[1]}/ipp/print"
+        host, port = self.server.server_address[:2]
+        return f"ipp://{host}:{port}/ipp/print"
 
     def __enter__(self):
         self.thread.start()
@@ -115,3 +121,19 @@ class FakePrinter:
                      if self.final_state == 9 else "aborted-by-system"),
             ])])
         return encode_response(0x0501, rid, [self._operation_group()])
+
+
+if __name__ == "__main__":
+    import sys
+    import time
+
+    printer = FakePrinter(port=int(sys.argv[1]) if len(sys.argv) > 1 else 8631,
+                          host=sys.argv[2] if len(sys.argv) > 2 else "127.0.0.1")
+    with printer:
+        print(f"fake printer at {printer.uri}", flush=True)
+        seen = 0
+        while True:
+            time.sleep(0.5)
+            for job in printer.jobs[seen:]:
+                print(f"job {job['id']}: {job['format']}, {len(job['document'])} bytes", flush=True)
+            seen = len(printer.jobs)

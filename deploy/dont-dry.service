@@ -1,7 +1,5 @@
-# systemd unit for running dont-dry without Docker (e.g. in a plain Debian LXC).
-# Install (see "Running on Proxmox" in the README):
-#   sudo cp deploy/dont-dry.service /etc/systemd/system/
-#   sudo systemctl enable --now dont-dry
+# systemd unit for running dont-dry without Docker. deploy/install.sh copies it to
+# /etc/systemd/system/ and writes the settings to /etc/dont-dry.env.
 [Unit]
 Description=dont-dry inkjet maintenance printer
 Documentation=https://github.com/frkey/dont-dry

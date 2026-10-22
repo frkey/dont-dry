@@ -11,7 +11,7 @@
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
-[Quick start](#quick-start-docker) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start-docker) · [Proxmox](#proxmox-ve-a-ready-container-in-two-commands) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -41,7 +41,8 @@ lines: gaps in those lines tell you a nozzle is starting to clog.
 - **English or Brazilian Portuguese** for the page, the notifications and the command output
   (`LOCALE=pt-BR`).
 - **Small, locked-down Docker image** (amd64 + arm64): non-root, read-only, no open ports, with a
-  healthcheck. Or a sandboxed systemd service without Docker.
+  healthcheck. Or a sandboxed systemd service from one installer, and a ready Proxmox container
+  in [two commands](#proxmox-ve-a-ready-container-in-two-commands).
 
 ## Quick start (Docker)
 
@@ -85,47 +86,91 @@ image yourself: `docker build -t dont-dry .`
 - **Epson, Brother, Canon:** usually `ipp://<ip>/ipp/print` as well; some use `ipp://<ip>/ipp`
 - Not sure? On Linux, `ippfind` (package `cups-ipp-utils`) lists every IPP printer on the network.
   Or open the printer's web page (type its IP in a browser) and look for AirPrint/IPP settings.
-- Use the IP address, or a name your router's DNS resolves: `.local` (mDNS) names do not resolve
-  inside the container.
+- With Docker, use the IP address or a name your router's DNS resolves: `.local` (mDNS) names do
+  not resolve inside the container. The [systemd install](#running-on-proxmox-or-linux) resolves
+  them.
 - Use `ipps://` instead of `ipp://` to encrypt the connection; self-signed certificates are
   accepted unless `TLS_VERIFY=true`.
 
-## Running on Proxmox
+## Running on Proxmox or Linux
 
-Any of these works. dont-dry only needs to reach the printer's IP on port 631.
+dont-dry only needs to reach the printer on port 631. If the printer is on a different VLAN, allow
+TCP 631 between them.
 
-**A. Docker inside an LXC (lightest).** Create a Debian 12 or 13 LXC (1 core, 256 MB RAM and 2 GB
-disk are plenty), turn on *Options → Features → nesting* (and *keyctl* for unprivileged
-containers), then install Docker and follow the [quick start](#quick-start-docker):
+### Proxmox VE: a ready container in two commands
+
+On the Proxmox host (the node's **Shell** in the web UI, or SSH as root):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/frkey/dont-dry/master/deploy/proxmox/create-lxc.sh
+bash create-lxc.sh --printer ipp://192.168.1.50/ipp/print
+```
+
+It creates an unprivileged Debian container (1 core, 256 MB of RAM, 2 GB of disk, started at boot,
+with the host's time zone), installs dont-dry in it as a sandboxed systemd service, checks that it
+can reach the printer and lists the next print times. Without `--printer`, it asks for the
+address. Read the script first if you like; it is short.
+
+| Option | Default | |
+|---|---|---|
+| `--printer URI` | *(asked)* | the printer, e.g. `ipp://192.168.1.50/ipp/print` |
+| `--schedule CRON` | `0 9 * * 1,4` | when to print, in quotes |
+| `--locale en-US\|pt-BR` | system language, else `en-US` | language of the page, notifications and messages |
+| `--test-print` | | print a page at the end |
+| `--ip dhcp\|CIDR` | `dhcp` | a static address, e.g. `192.168.1.60/24` |
+| `--gateway IP` | | your router, required with a static `--ip` |
+| `--ctid N` | next free ID | |
+| `--hostname NAME` | `dont-dry` | |
+| `--bridge NAME` | `vmbr0` | |
+| `--storage NAME` | `local-lvm` | where the container's disk goes |
+| `--template-storage NAME` | `local` | where the Debian template is stored |
+| `--disk GB` | `2` | |
+| `--memory MB` | `256` | |
+| `--ref BRANCH_OR_TAG` | the latest release | dont-dry version to install |
+
+Day to day, from the Proxmox host:
+
+| Task | Command |
+|---|---|
+| Printer status and ink | `pct exec <id> -- dont-dry info` |
+| Print a page now | `pct exec <id> -- dont-dry print` |
+| Change a setting | `pct exec <id> -- nano /etc/dont-dry.env`, then `pct exec <id> -- systemctl restart dont-dry` |
+| Follow the log | `pct exec <id> -- journalctl -u dont-dry -f` |
+| Update dont-dry | `pct exec <id> -- env LC_ALL=C.UTF-8 bash /opt/dont-dry/deploy/install.sh` |
+
+### Debian or Ubuntu: the same installer
+
+On any Debian 12+ or Ubuntu 22.04+ machine with systemd (an existing LXC or VM, a Raspberry Pi),
+as root:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/frkey/dont-dry/master/deploy/install.sh
+bash install.sh --printer ipp://192.168.1.50/ipp/print
+```
+
+It takes `--printer`, `--schedule`, `--timezone Area/City` (default: the machine's), `--locale`,
+`--test-print` and `--ref`, and writes the settings to `/etc/dont-dry.env` (readable by root
+only). Running it again is how you update: it keeps the version and the settings, and changes only
+the settings you pass as options. As root, `dont-dry info`, `dont-dry print` and `dont-dry next`
+run with the service's settings.
+
+Both scripts install the latest release only when its tag carries the dont-dry release signature,
+and the Python packages at exact versions checked against their hashes. The service runs as a
+throwaway user that can write nothing but its state folder. This install also resolves the
+printer's `.local` name, which keeps working when its IP address changes.
+
+### Docker, in an LXC or a VM
+
+In a Debian LXC (turn on *Options → Features → nesting*, plus *keyctl* for unprivileged
+containers) or a VM, install Docker and follow the [quick start](#quick-start-docker):
 
 ```sh
 apt update && apt install -y curl git
 curl -fsSL https://get.docker.com | sh
 ```
 
-**B. Plain LXC, no Docker.** Python and a sandboxed systemd service, with the same pinned and
-hash-checked packages as the image:
-
-```sh
-apt update && apt install -y python3-venv git fonts-dejavu-core
-git clone https://github.com/frkey/dont-dry /opt/dont-dry
-python3 -m venv /opt/dont-dry/venv
-/opt/dont-dry/venv/bin/pip install --require-hashes -r /opt/dont-dry/deploy/requirements.txt
-/opt/dont-dry/venv/bin/pip install --no-deps --no-build-isolation /opt/dont-dry
-install -m 600 /opt/dont-dry/.env.example /etc/dont-dry.env && nano /etc/dont-dry.env
-cp /opt/dont-dry/deploy/dont-dry.service /etc/systemd/system/
-systemctl daemon-reload && systemctl enable --now dont-dry
-journalctl -u dont-dry -f
-```
-
-To update, run `git -C /opt/dont-dry pull`, the two `pip install` lines again, and
-`systemctl restart dont-dry`. The unit's sandbox needs the *nesting* feature, which is on by
-default for new containers.
-
-**C. An existing Docker VM.** If you already run Docker in a VM, add the service from
-[`docker-compose.yml`](docker-compose.yml) to your stack.
-
-If the printer is on a different VLAN than the LXC or VM, allow TCP 631 between them.
+If you already run Docker, add the service from [`docker-compose.yml`](docker-compose.yml) to your
+stack.
 
 ## Configuration
 
@@ -189,6 +234,7 @@ With Docker: `docker compose exec dont-dry dont-dry info`, or `docker compose ru
 | `printer rejected the job: client-error-document-format-not-supported` | Set `DOCUMENT_FORMAT` to another format that `dont-dry info` lists. |
 | `job N processing (still processing after 300s)` | The printer was busy, for example cleaning its heads. Raise `JOB_TIMEOUT`. |
 | `printer is not accepting jobs (...)` | The printer is paused or shows an error on its panel (the reasons in parentheses say which). Fix it there; dont-dry retries on its own. |
+| `Release vX.Y.Z is not signed with the dont-dry release key` | The installer refused a release it could not verify, and nothing changed. Please report it: it should not happen. |
 | The container is `unhealthy` | Read `docker compose logs dont-dry`: the scheduler stopped or cannot write its heartbeat to `STATE_DIR`. |
 | Lines missing or streaky on the page | That is what the page is for: run the head cleaning from the printer's menu or app, then `dont-dry print`. If it keeps happening, print more often. |
 

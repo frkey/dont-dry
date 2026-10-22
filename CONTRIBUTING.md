@@ -60,7 +60,8 @@ src/dont_dry/
   i18n.py       translations and date formats; the catalogs are in locales/
   notify.py     ntfy / webhook notifications
   state.py      heartbeat and last-run files, written atomically
-deploy/         systemd unit and the hashed lock the image installs
+deploy/         install.sh (Debian/Ubuntu), proxmox/create-lxc.sh, the systemd unit and the hashed
+                lock that the image and install.sh use
 tests/          pytest suite with a fake IPP printer
 docs/           images for the README
 ```
@@ -92,9 +93,26 @@ The maintainer then reviews it, you handle each finding (fix it, explain why it 
 or move it to an issue) and push, and the new commits are reviewed the same way. Style
 suggestions alone do not hold a pull request back.
 
+### Deploy scripts
+
+`deploy/install.sh` and `deploy/proxmox/create-lxc.sh` are bash and must stay idempotent:
+running `install.sh` again is how users update. It never rewrites `/etc/dont-dry.env`; it only
+sets the settings given as options. Their messages are in English and Brazilian Portuguese (the
+`case "$LOCALE"` block at the top; `tests/test_deploy.py` fails if a message is missing in
+one of them), and they must pass ShellCheck:
+
+```sh
+shellcheck deploy/*.sh deploy/proxmox/*.sh
+```
+
+`tests/test_deploy.py` also runs `create-lxc.sh` against stand-ins for Proxmox's commands, and
+CI's `install` job runs `install.sh` from the pull request on a real Ubuntu with systemd. If you
+touch the systemd sandbox in `dont-dry.service`, check that it still starts in an unprivileged
+Proxmox container with nesting.
+
 ### Dependencies
 
-The Dockerfile and the systemd install use `deploy/requirements.txt`: exact versions with hashes,
+The Dockerfile and `install.sh` use `deploy/requirements.txt`: exact versions with hashes,
 setuptools included, so a build never fetches an unpinned package. After changing the
 dependencies in `pyproject.toml` (or `deploy/requirements.in`), run the command at the top of
 that file again (it needs [uv](https://docs.astral.sh/uv/)); `tests/test_lock.py` fails until the
@@ -128,9 +146,26 @@ Versions follow [Semantic Versioning](https://semver.org/). The version lives on
 
 1. In a pull request, set `__version__` and move `[Unreleased]` in `CHANGELOG.md` to a dated
    section (`## [X.Y.Z] - YYYY-MM-DD`), with its compare link at the bottom.
-2. After it is merged, make a signed tag on `master` and push it:
+2. After it is merged, make a **signed** tag on `master` with the release key and push it:
    `git tag -s vX.Y.Z -m "dont-dry X.Y.Z"` then `git push origin vX.Y.Z`. CI publishes
    `ghcr.io/frkey/dont-dry:X.Y.Z`, `:X.Y` and `:latest`. Publish a GitHub release with the
-   changelog section as its notes.
+   changelog section as its notes. From then on, new installs and every update without `--ref`
+   get that version.
 
 Pushes to `master` publish the `:edge` image only; `:latest` always means the latest release.
+
+### Release key
+
+`install.sh` installs a release only when its tag is signed by a key in `RELEASE_SIGNERS` at the
+top of `deploy/install.sh` (git's allowed-signers format), and only if the tag object names
+itself with that same version. The check runs in the installer that is already installed, so:
+
+- Sign with SSH. With the key in a password manager's SSH agent, git signs through the agent and
+  the private key never leaves it: `git config gpg.format ssh` and
+  `git config user.signingkey "key::<the public key from RELEASE_SIGNERS>"` (1Password also needs
+  `git config gpg.ssh.program` set to its `op-ssh-sign`). Never copy the private key to a file
+  or a terminal.
+- Add the public key to GitHub as a *signing* key too, so tags show as verified.
+- To change keys, add the new key to `RELEASE_SIGNERS` and ship that in a release signed with a
+  key already listed; remove the old key in a later release. A tag that no listed key signed is
+  refused by every server, and the only way past it is `--ref`.

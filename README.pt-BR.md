@@ -11,7 +11,7 @@
 
 [English](README.md) · **Português (Brasil)**
 
-[Início rápido](#início-rápido-docker) · [Configuração](#configuração) · [Problemas comuns](#problemas-comuns) · [Como contribuir](CONTRIBUTING.md)
+[Início rápido](#início-rápido-docker) · [Proxmox](#proxmox-ve-um-container-pronto-em-dois-comandos) · [Configuração](#configuração) · [Problemas comuns](#problemas-comuns) · [Como contribuir](CONTRIBUTING.md)
 
 </div>
 
@@ -45,7 +45,8 @@ teste de bico: falhas nessas linhas mostram que um bico está começando a entup
 - **Em português ou inglês**: a página, as notificações e a saída dos comandos saem em
   português com `LOCALE=pt-BR`.
 - **Imagem Docker pequena e trancada** (amd64 + arm64): sem root, somente leitura, sem portas
-  abertas e com healthcheck. Ou um serviço systemd isolado, sem Docker.
+  abertas e com healthcheck. Ou um serviço systemd isolado com um instalador só, e um container
+  pronto no Proxmox em [dois comandos](#proxmox-ve-um-container-pronto-em-dois-comandos).
 
 ## Início rápido (Docker)
 
@@ -91,48 +92,91 @@ gerar a imagem você mesmo: `docker build -t dont-dry .`
 - Na dúvida? No Linux, o `ippfind` (pacote `cups-ipp-utils`) lista todas as impressoras IPP da
   rede. Ou abra a página da impressora (digite o IP dela no navegador) e procure as opções de
   AirPrint/IPP.
-- Use o endereço IP, ou um nome que o DNS do seu roteador resolva: nomes `.local` (mDNS) não
-  resolvem dentro do contêiner.
+- Com Docker, use o endereço IP ou um nome que o DNS do seu roteador resolva: nomes `.local`
+  (mDNS) não resolvem dentro do contêiner. A [instalação com systemd](#rodando-no-proxmox-ou-no-linux)
+  resolve esses nomes.
 - Use `ipps://` no lugar de `ipp://` para criptografar a conexão; certificados autoassinados são
   aceitos, a não ser que `TLS_VERIFY=true`.
 
-## Rodando no Proxmox
+## Rodando no Proxmox ou no Linux
 
-Qualquer uma destas opções funciona. O dont-dry só precisa alcançar o IP da impressora na porta
-631.
+O dont-dry só precisa alcançar a impressora na porta 631. Se ela estiver em outra VLAN, libere
+TCP 631 entre as duas.
 
-**A. Docker dentro de um LXC (mais leve).** Crie um LXC Debian 12 ou 13 (1 núcleo, 256 MB de RAM e
-2 GB de disco sobram), ligue *Options → Features → nesting* (e *keyctl* em contêineres sem
-privilégio), instale o Docker e siga o [início rápido](#início-rápido-docker):
+### Proxmox VE: um container pronto em dois comandos
+
+No host do Proxmox (o **Shell** do nó na interface web, ou SSH como root):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/frkey/dont-dry/master/deploy/proxmox/create-lxc.sh
+bash create-lxc.sh --locale pt-BR --printer ipp://192.168.1.50/ipp/print
+```
+
+Ele cria um container Debian sem privilégios (1 núcleo, 256 MB de RAM, 2 GB de disco, iniciado
+no boot, com o fuso horário do host), instala o dont-dry nele como um serviço systemd isolado,
+confere se consegue falar com a impressora e mostra os próximos horários de impressão. Sem
+`--printer`, ele pergunta o endereço. Se quiser, leia o script antes; ele é curto.
+
+| Opção | Padrão | |
+|---|---|---|
+| `--printer URI` | *(perguntado)* | a impressora, ex.: `ipp://192.168.1.50/ipp/print` |
+| `--schedule CRON` | `0 9 * * 1,4` | quando imprimir, entre aspas |
+| `--locale en-US\|pt-BR` | idioma do sistema, senão `en-US` | idioma da página, das notificações e das mensagens |
+| `--test-print` | | imprime uma página no fim |
+| `--ip dhcp\|CIDR` | `dhcp` | um endereço fixo, ex.: `192.168.1.60/24` |
+| `--gateway IP` | | o seu roteador, obrigatório com `--ip` fixo |
+| `--ctid N` | próximo ID livre | |
+| `--hostname NOME` | `dont-dry` | |
+| `--bridge NOME` | `vmbr0` | |
+| `--storage NOME` | `local-lvm` | onde fica o disco do container |
+| `--template-storage NOME` | `local` | onde fica o template do Debian |
+| `--disk GB` | `2` | |
+| `--memory MB` | `256` | |
+| `--ref BRANCH_OU_TAG` | a última versão | versão do dont-dry a instalar |
+
+No dia a dia, a partir do host do Proxmox:
+
+| Tarefa | Comando |
+|---|---|
+| Estado da impressora e tinta | `pct exec <id> -- dont-dry info` |
+| Imprimir uma página agora | `pct exec <id> -- dont-dry print` |
+| Mudar uma configuração | `pct exec <id> -- nano /etc/dont-dry.env`, depois `pct exec <id> -- systemctl restart dont-dry` |
+| Acompanhar o log | `pct exec <id> -- journalctl -u dont-dry -f` |
+| Atualizar o dont-dry | `pct exec <id> -- env LC_ALL=C.UTF-8 bash /opt/dont-dry/deploy/install.sh` |
+
+### Debian ou Ubuntu: o mesmo instalador
+
+Em qualquer máquina Debian 12+ ou Ubuntu 22.04+ com systemd (um LXC ou VM que você já tem, um
+Raspberry Pi), como root:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/frkey/dont-dry/master/deploy/install.sh
+bash install.sh --locale pt-BR --printer ipp://192.168.1.50/ipp/print
+```
+
+Ele aceita `--printer`, `--schedule`, `--timezone Area/Cidade` (padrão: o da máquina), `--locale`,
+`--test-print` e `--ref`, e grava as configurações em `/etc/dont-dry.env` (só o root lê). Rodar
+de novo é como se atualiza: ele mantém a versão e as configurações, e muda só as que você passar
+como opção. Como root, `dont-dry info`, `dont-dry print` e `dont-dry next` usam as configurações
+do serviço.
+
+Os dois scripts só instalam a última versão quando a tag dela tem a assinatura de releases do
+dont-dry, e instalam os pacotes Python em versões exatas, com o hash conferido. O serviço roda
+com um usuário temporário que só consegue gravar na própria pasta de estado. Esta instalação
+também resolve o nome `.local` da impressora, que continua valendo quando o IP dela muda.
+
+### Docker, num LXC ou numa VM
+
+Num LXC Debian (ligue *Options → Features → nesting*, e *keyctl* em contêineres sem privilégio)
+ou numa VM, instale o Docker e siga o [início rápido](#início-rápido-docker):
 
 ```sh
 apt update && apt install -y curl git
 curl -fsSL https://get.docker.com | sh
 ```
 
-**B. LXC simples, sem Docker.** Python e um serviço systemd isolado, com os mesmos pacotes de
-versão fixa e hash conferido da imagem:
-
-```sh
-apt update && apt install -y python3-venv git fonts-dejavu-core
-git clone https://github.com/frkey/dont-dry /opt/dont-dry
-python3 -m venv /opt/dont-dry/venv
-/opt/dont-dry/venv/bin/pip install --require-hashes -r /opt/dont-dry/deploy/requirements.txt
-/opt/dont-dry/venv/bin/pip install --no-deps --no-build-isolation /opt/dont-dry
-install -m 600 /opt/dont-dry/.env.example /etc/dont-dry.env && nano /etc/dont-dry.env
-cp /opt/dont-dry/deploy/dont-dry.service /etc/systemd/system/
-systemctl daemon-reload && systemctl enable --now dont-dry
-journalctl -u dont-dry -f
-```
-
-Para atualizar, rode `git -C /opt/dont-dry pull`, as duas linhas de `pip install` de novo e
-`systemctl restart dont-dry`. O isolamento do serviço precisa do recurso *nesting*, que vem
-ligado por padrão em contêineres novos.
-
-**C. Uma VM com Docker que você já tem.** Se você já roda Docker numa VM, acrescente o serviço do
-[`docker-compose.yml`](docker-compose.yml) à sua stack.
-
-Se a impressora estiver numa VLAN diferente do LXC ou da VM, libere TCP 631 entre elas.
+Se você já roda Docker, acrescente o serviço do [`docker-compose.yml`](docker-compose.yml) à sua
+stack.
 
 ## Configuração
 
@@ -196,6 +240,7 @@ Com Docker: `docker compose exec dont-dry dont-dry info`, ou `docker compose run
 | `printer rejected the job: client-error-document-format-not-supported` | Defina `DOCUMENT_FORMAT` com outro formato que o `dont-dry info` liste. |
 | `job N processing (still processing after 300s)` | A impressora estava ocupada, por exemplo limpando as cabeças. Aumente o `JOB_TIMEOUT`. |
 | `printer is not accepting jobs (...)` | A impressora está pausada ou mostra um erro no painel (os motivos entre parênteses dizem qual). Resolva lá; o dont-dry tenta de novo sozinho. |
+| `A versão vX.Y.Z não está assinada com a chave de releases do dont-dry` | O instalador recusou uma versão que não conseguiu conferir, e nada mudou. Por favor, avise: isso não deveria acontecer. |
 | O contêiner fica `unhealthy` | Leia `docker compose logs dont-dry`: o agendador parou ou não consegue gravar o heartbeat em `STATE_DIR`. |
 | Linhas faltando ou falhadas na página | É para isso que a página serve: rode a limpeza de cabeça pelo menu ou app da impressora e depois `dont-dry print`. Se continuar acontecendo, imprima com mais frequência. |
 
