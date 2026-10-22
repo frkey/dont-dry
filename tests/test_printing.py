@@ -1,6 +1,6 @@
 import pytest
 
-from dont_dry import ipp, pwg
+from dont_dry import ipp, page, pwg
 from dont_dry.config import Config
 from dont_dry.printer import print_page
 
@@ -349,3 +349,77 @@ def test_an_http_refusal_of_print_job_is_not_a_lost_answer(env, monkeypatch):
     assert not result.success and not result.retryable
     assert result.reason == "rejected" and not result.reached_printer
     assert "HTTP 401" in result.message
+
+
+# -- custom pages ----------------------------------------------------------------------
+
+
+def _pwg_pixel(printer, x_share, y_share):
+    (decoded,) = pwg.decode(printer.jobs[0]["document"])
+    x, y = int(decoded.width * x_share), int(decoded.height * y_share)
+    at = (y * decoded.width + x) * 3
+    return decoded.pixels[at:at + 3]
+
+
+@pytest.mark.parametrize("mode", ["RGBA", "LA", "P"])
+def test_transparent_custom_images_print_white_not_black(env, tmp_path, mode):
+    from PIL import Image
+    image = Image.new("RGBA", (200, 200), (0, 0, 0, 0))          # transparent...
+    image.paste((255, 0, 0, 255), (80, 80, 120, 120))            # ...with a red square
+    if mode == "LA":
+        image = image.convert("LA")
+    elif mode == "P":  # a palette whose color 0 is transparent
+        image = Image.new("P", (200, 200), 0)
+        image.putpalette([0, 0, 0, 255, 0, 0] + [0] * 762)
+        image.paste(1, (80, 80, 120, 120))
+        image.info["transparency"] = 0
+    custom = tmp_path / "logo.png"
+    image.save(custom)
+    with FakePrinter(formats=["image/pwg-raster"]) as printer:
+        assert print_page(env(printer, CUSTOM_PAGE=str(custom))).success
+    assert _pwg_pixel(printer, 0.2, 0.5) == b"\xff\xff\xff"
+
+
+def test_custom_photos_are_turned_upright(env, tmp_path):
+    from PIL import Image
+    image = Image.new("RGB", (300, 100), (255, 255, 255))         # stored landscape...
+    image.paste((0, 0, 255), (0, 0, 150, 100))                    # ...left half blue
+    exif = Image.Exif()
+    exif[0x0112] = 6                                             # "rotate 90° clockwise to view"
+    custom = tmp_path / "photo.jpg"
+    image.save(custom, exif=exif, quality=95)
+    with FakePrinter(formats=["image/pwg-raster"]) as printer:
+        assert print_page(env(printer, CUSTOM_PAGE=str(custom))).success
+    top, bottom = _pwg_pixel(printer, 0.5, 0.2), _pwg_pixel(printer, 0.5, 0.8)
+    assert top[2] > 200 and top[0] < 60          # upright: the blue half is on top
+    assert bottom[0] > 200 and bottom[2] > 200   # and white below
+
+
+def test_pwg_is_skipped_when_the_printer_lists_only_non_square_resolutions():
+    from dont_dry.ipp import Resolution
+    from dont_dry.printer import PrinterInfo, choose_format
+    info = PrinterInfo.from_attributes({
+        "document-format-supported": ["image/pwg-raster", "image/jpeg"],
+        "pwg-raster-document-resolution-supported": [Resolution(600, 300, 3)],
+        "pwg-raster-document-type-supported": ["srgb_8"],
+    })
+    assert choose_format(info, "auto") == "image/jpeg"
+
+
+def test_pwg_encoding_never_copies_the_whole_raster(monkeypatch):
+    from PIL import Image
+    image = page.render(dpi=60)
+    full = []
+    original = Image.Image.tobytes
+
+    def tobytes(self, *args, **kwargs):
+        if self.size[1] > 1:
+            full.append(self.size)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "tobytes", tobytes)
+    data = pwg.encode(image, dpi=60)
+    monkeypatch.undo()
+    assert full == []
+    (decoded,) = pwg.decode(data)
+    assert decoded.pixels == image.tobytes()

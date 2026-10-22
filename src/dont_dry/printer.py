@@ -164,7 +164,7 @@ def choose_format(info: PrinterInfo, preference: str) -> str:
         return preference
     for fmt in PREFERRED_FORMATS:
         if fmt in info.formats:
-            if fmt == "image/pwg-raster" and not _pwg_type(info):
+            if fmt == "image/pwg-raster" and (not _pwg_type(info) or _pwg_dpi(info) is None):
                 continue
             return fmt
     raise PrintError(
@@ -179,10 +179,12 @@ def _pwg_type(info: PrinterInfo) -> str | None:
     return None if info.pwg_types else "srgb_8"
 
 
-def _pwg_dpi(info: PrinterInfo) -> int:
+def _pwg_dpi(info: PrinterInfo) -> int | None:
+    """The resolution to render PWG Raster at, or None when the printer lists only non-square
+    ones (dont-dry renders square pixels)."""
     dpis = sorted({r.dpi[0] for r in info.pwg_resolutions if r.dpi[0] == r.dpi[1]})
     if not dpis:
-        return 300
+        return None if info.pwg_resolutions else 300
     if 300 in dpis:
         return 300
     at_least = [d for d in dpis if d >= 300]
@@ -200,7 +202,18 @@ def _load_custom_page(path: str) -> tuple[str, bytes | Image.Image]:
         image.load()
     except Exception as exc:
         raise PrintError(f"CUSTOM_PAGE {path} is neither a PDF nor an image: {exc}") from exc
-    return "image", image.convert("RGB")
+    return "image", _flatten(ImageOps.exif_transpose(image))
+
+
+def _flatten(image: Image.Image) -> Image.Image:
+    """RGB on white: converting a transparent image straight to RGB paints its transparent
+    parts black, a page of wasted ink."""
+    if image.mode in ("RGBA", "LA", "PA") or "transparency" in image.info:
+        rgba = image.convert("RGBA")
+        white = Image.new("RGB", rgba.size, page.WHITE)
+        white.paste(rgba, mask=rgba.getchannel("A"))
+        return white
+    return image.convert("RGB")
 
 
 def build_document(cfg: Config, info: PrinterInfo, fmt: str) -> bytes:
@@ -214,7 +227,7 @@ def build_document(cfg: Config, info: PrinterInfo, fmt: str) -> bytes:
                                  "use a PNG or JPEG image instead")
             return custom[1]  # type: ignore[return-value]
 
-    dpi = _pwg_dpi(info) if fmt == "image/pwg-raster" else 300
+    dpi = (_pwg_dpi(info) or 300) if fmt == "image/pwg-raster" else 300
     if custom:
         image = _fit_to_page(custom[1], cfg.page_size, dpi)  # type: ignore[arg-type]
     else:

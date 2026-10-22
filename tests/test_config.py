@@ -55,3 +55,32 @@ def test_printer_is_required_only_where_needed():
     cfg = Config.from_env()
     with pytest.raises(ConfigError, match="PRINTER_URI is not set"):
         cfg.require_printer()
+
+
+@pytest.mark.parametrize("content,message", [
+    (None, "cannot read CUSTOM_PAGE"),          # missing
+    (b"hello", "neither a PDF nor an image"),
+])
+def test_custom_page_is_checked_at_start_up(monkeypatch, tmp_path, content, message):
+    path = tmp_path / "page.png"
+    if content is not None:
+        path.write_bytes(content)
+    monkeypatch.setenv("CUSTOM_PAGE", str(path))
+    with pytest.raises(ConfigError, match=message):
+        Config.from_env()
+
+
+def test_a_readable_custom_page_passes(monkeypatch, tmp_path):
+    from PIL import Image
+    Image.new("RGB", (10, 10)).save(tmp_path / "page.png")
+    (tmp_path / "page.pdf").write_bytes(b"%PDF-1.4 fake")
+    for name in ("page.png", "page.pdf"):
+        monkeypatch.setenv("CUSTOM_PAGE", str(tmp_path / name))
+        assert Config.from_env().custom_page.endswith(name)
+
+
+@pytest.mark.parametrize("value", ["ipp://[fe80::1/ipp/print", "ipp://[::1/x"])
+def test_malformed_urls_are_a_config_error(monkeypatch, value):
+    monkeypatch.setenv("PRINTER_URI", value)
+    with pytest.raises(ConfigError, match="PRINTER_URI"):
+        Config.from_env()

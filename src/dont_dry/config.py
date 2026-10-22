@@ -69,8 +69,12 @@ def _url(name: str, schemes: tuple[str, ...], example: str) -> str:
     value = _str(name)
     if not value:
         return ""
-    parts = urlsplit(value)
-    if parts.scheme.lower() not in schemes or not parts.hostname:
+    try:
+        parts = urlsplit(value)
+        host = parts.hostname
+    except ValueError:  # e.g. an unbalanced "[" in an IPv6 address
+        host = None
+    if host is None or parts.scheme.lower() not in schemes:
         raise ConfigError(f"{name} must be a {' or '.join(s + '://' for s in schemes)} URL "
                           f"(example: {example}), got {value!r}")
     try:
@@ -78,6 +82,30 @@ def _url(name: str, schemes: tuple[str, ...], example: str) -> str:
     except ValueError:
         raise ConfigError(f"{name} has an invalid port: {value!r}") from None
     return value
+
+
+def _custom_page() -> str:
+    """CUSTOM_PAGE, opened now so that a missing or unreadable file stops dont-dry at start-up
+    rather than on the day of the next print."""
+    path = _str("CUSTOM_PAGE")
+    if not path:
+        return ""
+    try:
+        with open(path, "rb") as handle:
+            is_pdf = handle.read(5) == b"%PDF-"
+    except OSError as exc:
+        raise ConfigError(f"cannot read CUSTOM_PAGE {path!r}: {exc.strerror or exc} (the systemd "
+                          "service runs as a throwaway user: put the file where anyone can read "
+                          "it, such as /etc/dont-dry/)") from None
+    if not is_pdf:
+        from PIL import Image
+        try:
+            with Image.open(path) as image:
+                image.verify()
+        except Exception as exc:  # Pillow raises many kinds for a file it cannot read
+            raise ConfigError(f"CUSTOM_PAGE {path!r} is neither a PDF nor an image Pillow can "
+                              f"read: {exc}") from None
+    return path
 
 
 def _locale() -> str:
@@ -135,7 +163,7 @@ class Config:
             document_format=_choice("DOCUMENT_FORMAT", "auto", FORMATS),
             page_size=_choice("PAGE_SIZE", "a4", PAGE_SIZES),
             page_title=_str("PAGE_TITLE") or i18n.Translator(locale)("page.title"),
-            custom_page=_str("CUSTOM_PAGE"),
+            custom_page=_custom_page(),
             run_on_start=_bool("RUN_ON_START", False),
             catch_up=_bool("CATCH_UP", True),
             retries=_int("RETRIES", 3, maximum=20),

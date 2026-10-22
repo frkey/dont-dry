@@ -25,6 +25,12 @@ All notable changes to dont-dry are listed here. The format follows
   the log.
 - Each request to the printer has a two-minute deadline, so a printer that answers a byte at a
   time cannot hold the scheduler.
+- A `CUSTOM_PAGE` image with transparency prints white where it is transparent, not black, and
+  a photo prints upright.
+- `CUSTOM_PAGE` is checked at start-up (missing, unreadable, not a PDF or an image), and a
+  malformed URL in a setting is a clean configuration error instead of a traceback.
+- PWG Raster is encoded row by row: at 600 dpi it needs about a third of the memory it did. A
+  printer that lists only non-square PWG resolutions gets another format.
 - A schedule with prints less than 3 hours apart (such as `* 9 * * 1`, sixty pages every Monday)
   is refused at start-up.
 - dont-dry never prints again within an hour of a page that reached the printer, whatever asks

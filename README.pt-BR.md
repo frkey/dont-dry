@@ -194,7 +194,7 @@ confere todas ao iniciar e para com uma mensagem clara se alguma estiver errada.
 | `LOCALE` | `en-US` | Idioma da página, das notificações e da saída dos comandos: `en-US` ou `pt-BR` |
 | `PAGE_TITLE` | `dont-dry maintenance page` | Título impresso na página (o padrão segue o `LOCALE`: `página de manutenção dont-dry` em pt-BR) |
 | `DOCUMENT_FORMAT` | `auto` | `auto`, `application/pdf`, `image/pwg-raster` ou `image/jpeg` |
-| `CUSTOM_PAGE` | | Caminho de um PDF, PNG ou JPEG seu para imprimir no lugar (imagens são ajustadas à página) |
+| `CUSTOM_PAGE` | | Caminho de um PDF, PNG ou JPEG seu para imprimir no lugar. Imagens são ajustadas à página, postas de pé e impressas sobre branco onde são transparentes. Na instalação com systemd, deixe o arquivo onde qualquer usuário consiga ler, como `/etc/dont-dry/pagina.png` |
 | `RETRIES` | `3` | Tentativas extras quando a impressora não responde (0 a 20) |
 | `RETRY_DELAY` | `300` | Segundos entre as tentativas |
 | `JOB_TIMEOUT` | `300` | Segundos de espera para o trabalho terminar |

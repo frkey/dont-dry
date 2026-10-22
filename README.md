@@ -188,7 +188,7 @@ them all when it starts and stops with a clear message if one is wrong.
 | `LOCALE` | `en-US` | Language of the page, notifications and command output: `en-US` or `pt-BR` |
 | `PAGE_TITLE` | `dont-dry maintenance page` | Heading printed on the page (the default follows `LOCALE`) |
 | `DOCUMENT_FORMAT` | `auto` | `auto`, `application/pdf`, `image/pwg-raster` or `image/jpeg` |
-| `CUSTOM_PAGE` | | Path to your own PDF, PNG or JPEG to print instead (images are scaled to fit) |
+| `CUSTOM_PAGE` | | Path to your own PDF, PNG or JPEG to print instead. Images are scaled to fit, turned upright and printed on white where transparent. With the systemd install, put it where any user can read it, such as `/etc/dont-dry/page.png` |
 | `RETRIES` | `3` | Extra attempts when the printer can't be reached (0 to 20) |
 | `RETRY_DELAY` | `300` | Seconds between attempts |
 | `JOB_TIMEOUT` | `300` | Seconds to wait for a job to finish |
