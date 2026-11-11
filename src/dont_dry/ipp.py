@@ -245,11 +245,6 @@ class _Reader:
     def u16(self) -> int:
         return struct.unpack(">H", self.take(2))[0]
 
-    def peek(self) -> int:
-        if self.pos >= len(self.data):
-            raise IPPError("truncated IPP response")
-        return self.data[self.pos]
-
 
 def _decode_value(tag: int, raw: bytes) -> Any:
     if tag in (TAG_INTEGER, TAG_ENUM):
