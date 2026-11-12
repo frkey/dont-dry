@@ -1,5 +1,5 @@
 # Pinned by digest; Dependabot proposes updates
-FROM python:3.13-slim@sha256:4873c73fa393882cf10f9d1054c928e95201c1559ca2107c1589786ece10f49f
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 # DejaVu draws the page's text; without it Pillow falls back to a tiny bitmap font
 RUN apt-get update \
